@@ -316,7 +316,16 @@ def _normalize_field_value(key: str, value: str) -> str | None:
         if UNREADABLE_RE.search(value):
             return "UNREADABLE"
         m = DATE_RE.search(value)
-        return m.group(1) if m else None
+        if not m:
+            return None
+        raw = m.group(1)
+        try:
+            from datetime import datetime
+
+            datetime.strptime(raw, "%Y-%m-%d")
+        except ValueError:
+            return "UNREADABLE"
+        return raw
     if key == "species_code":
         code = re.sub(r"[^A-Za-z0-9_]", "", value).upper()
         return code or None
