@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import re
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -320,8 +321,6 @@ def _normalize_field_value(key: str, value: str) -> str | None:
             return None
         raw = m.group(1)
         try:
-            from datetime import datetime
-
             datetime.strptime(raw, "%Y-%m-%d")
         except ValueError:
             return "UNREADABLE"
