@@ -329,8 +329,9 @@ def _normalize_field_value(key: str, value: str) -> str | None:
             return "[NAME CUT OUT]"
         if FOOTER_RE.search(value) or INJECTION_RE.search(value):
             return None
-        value = re.sub(r"\bSCAN IMAGE\b", "", value, flags=re.I).strip(" '\"|")
-        value = re.sub(r"\s+", " ", value).strip()
+        value = re.sub(r"\bSCAN IMAGE\b", "", value, flags=re.I)
+        value = re.sub(r"[‘’'`\"|]+", " ", value)
+        value = re.sub(r"\s+", " ", value).strip(" .,;:")
         return value or None
     if key in {"observed_flags", "registry_status", "declared_purpose", "waiver_code"}:
         return value
