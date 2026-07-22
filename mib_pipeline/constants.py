@@ -64,6 +64,39 @@ KNOWN_WORLDS = {
     "Eris Relay",
 }
 
+# Compositional applicant-name grammar (field manual / generator).
+NAME_PREFIXES = (
+    "Ari",
+    "Ixo",
+    "Lu",
+    "Mira",
+    "Nex",
+    "Ori",
+    "Qor",
+    "Sol",
+    "Tek",
+    "Vee",
+    "Xan",
+    "Za",
+)
+NAME_SUFFIXES = (
+    "dane",
+    "ix",
+    "kesh",
+    "mora",
+    "nax",
+    "quell",
+    "rix",
+    "tari",
+    "ul",
+    "vara",
+    "voss",
+    "zarn",
+)
+NAME_PARTS = tuple(
+    prefix + suffix for prefix in NAME_PREFIXES for suffix in NAME_SUFFIXES
+)
+
 DISQUALIFYING_FLAGS = {
     "memory_tampering",
     "planetary_embargo",

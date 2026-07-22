@@ -138,8 +138,8 @@ def _try_review_approve_recovery(
 ) -> tuple[str, str] | None:
     """Recover NEEDS_REVIEW → APPROVED for complete clean packets.
 
-    Never recovers fee-unknown, review flags, silent_risk_gap, or incomplete cores.
-    CFA guard requires biometric panel observed OR digital-clean trusted intake.
+    Never recovers fee-unknown, review flags, or incomplete cores.
+    CFA guard: require an explicit biometric flags panel observation.
     """
     if reason not in {"attest_without_intake", "uncertain_ocr"}:
         return None
@@ -160,53 +160,27 @@ def _try_review_approve_recovery(
     if _packet_damage_score(packet) >= 4:
         return None
 
-    bio_ok = packet.biometric_flags_observed or "biometric" in packet.docs_present
-    digital_clean = (
-        fee == "paid"
-        and visa in {"XW-1", "DIP-1"}
-        and "intake" in packet.docs_present
-        and packet.trusted_span_count >= 20
-    )
-    dip_waived = (
-        fee == "waived"
-        and visa == "DIP-1"
-        and "fee_receipt" in packet.docs_present
-        and packet.trusted_span_count >= 15
-    )
-    # XW-1 complete multisource packet (strobl-inspired, our features only).
-    xw1_complete = (
-        visa == "XW-1"
-        and fee == "paid"
-        and "intake" in packet.docs_present
-        and "sponsor_letter" in packet.docs_present
-        and packet.trusted_span_count >= 25
-        and (bio_ok or packet.biometric_flags_observed)
-    )
-    if not (bio_ok or digital_clean or dip_waived or xw1_complete):
+    # Strict strobl-style gate: never approve without a visible flags panel.
+    if not packet.biometric_flags_observed:
+        return None
+    if visa == "MED-3" and not packet.biometric_flags_observed:
         return None
     return "APPROVED", f"recover:{reason}"
 
 
 def _try_silent_stamp_demotion(packet: PacketExtract, reason: str) -> tuple[str, str] | None:
-    """APPROVED → REVIEW only for severe visible damage with no biometric panel.
+    """APPROVED → REVIEW when the biometric flags panel was never observed.
 
-    Broad demotion mass-converts true approvals to review and nets negative on
-    public train. Silent stamps remain an unsolved CFA class without CV.
+    Silent disqualifying stamps (biohazard / warrant / memory) produce CFA when
+    we treat missing risk text as `none`. Require visible observation instead.
     """
     if reason == "manual_finding" or reason.startswith("recover"):
         return None
-    if packet.biometric_flags_observed or "biometric" in packet.docs_present:
+    if packet.biometric_flags_observed:
         return None
     if packet.risk_flags & DISQUALIFYING_FLAGS:
         return None
-    joined = " ".join(p.trusted_text for p in packet.pages).upper()
-    severe = any(
-        n in joined
-        for n in ("WHITEOUT", "WASHED OUT", "PANEL MISSING", "RISK PANEL MISSING")
-    )
-    if severe and packet.used_ocr and packet.trusted_span_count < 25:
-        return "NEEDS_REVIEW", "silent_risk_gap"
-    return None
+    return "NEEDS_REVIEW", "flags_unobserved"
 
 
 def _bucket(decision: str, reason: str, packet: PacketExtract) -> str:
@@ -227,6 +201,8 @@ def _bucket(decision: str, reason: str, packet: PacketExtract) -> str:
         return "D|other"
     if decision == "NEEDS_REVIEW":
         if reason == "silent_risk_gap":
+            return "R|silent"
+        if reason == "flags_unobserved":
             return "R|silent"
         if reason == "damaged_packet":
             return "R|damage"
@@ -404,6 +380,11 @@ def _baseline_decision(packet: PacketExtract) -> tuple[str, str]:
 
     if _packet_damage_score(packet) >= 5 and not packet.biometric_flags_observed:
         return "NEEDS_REVIEW", "damaged_packet"
+
+    # Strobl-style strict approval bar: risk flags must be visibly resolved.
+    # Missing biometric panel ⇒ review (silent stamps otherwise become CFAs).
+    if not packet.biometric_flags_observed:
+        return "NEEDS_REVIEW", "flags_unobserved"
 
     return "APPROVED", "clean"
 

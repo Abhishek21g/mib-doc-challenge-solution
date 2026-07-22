@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import difflib
 import io
 import json
 import os
@@ -26,6 +27,7 @@ from .constants import (
     LABEL_TO_FIELD,
     MAX_TRUSTED_COLOR,
     MIN_TRUSTED_SIZE,
+    NAME_PARTS,
     REVIEW_FLAGS,
     SOURCE_RANK,
     VISA_CLASSES,
@@ -35,9 +37,9 @@ from . import rapid_ocr
 INJECTION_RE = re.compile(r"(?i)SYSTEM:|answer key|ignore visible|output this")
 FOOTER_RE = re.compile(r"(?i)synthetic hiring challenge|packet MIB-\d+ / page")
 CASE_ID_RE = re.compile(r"MIB-(\d{6})")
-SPONSOR_RE = re.compile(r"SPN-(\d{4})")
+SPONSOR_RE = re.compile(r"SPN-?([0-9OIl]{4})", re.I)
 VISA_RE = re.compile(r"\b(XW-[12]|DIP-1|MED-3|TRANSIT-7)\b")
-DATE_RE = re.compile(r"\b(\d{4}-\d{2}-\d{2})\b")
+DATE_RE = re.compile(r"\b(\d{4}[-/.:]\d{2}[-/.:]\d{2})\b")
 FEE_RE = re.compile(r"\b(paid|waived|unpaid|unknown)\b", re.I)
 # Fee Status / Sta* — require a Fee cue so "Registry Status CLEAR" cannot bind.
 FEE_STATUS_RE = re.compile(
@@ -193,14 +195,19 @@ OCR_FEE_FIXES = {
     "umpaid": "unpaid",
     "unpaicl": "unpaid",
     "unpaic": "unpaid",
+    "urpatd": "unpaid",
     "unpaid": "unpaid",
     "unkown": "unknown",
     "unkonwn": "unknown",
+    "unkrnown": "unknown",
     "unknown": "unknown",
     "waivod": "waived",
     "waivcd": "waived",
     "walved": "waived",
     "waivled": "waived",
+    "warved": "waived",
+    "watved": "waived",
+    "aaived": "waived",
     "unved": "waived",
     "waiv": "waived",
     "waved": "waived",
@@ -208,6 +215,7 @@ OCR_FEE_FIXES = {
     "eared": "waived",
     "earved": "waived",
     "eavved": "waived",
+    "eaved": "waived",
     "pac": "paid",
     "paid": "paid",
     "paicl": "paid",
@@ -218,6 +226,7 @@ OCR_FEE_FIXES = {
     "pag": "paid",
     "pal": "paid",
     "pakd": "paid",
+    "naid": "paid",
     "aig": "paid",
     "paidl": "paid",
 }
@@ -281,6 +290,70 @@ def _clean_value(value: str) -> str:
     value = value.strip().strip("|").strip()
     value = re.sub(r"\s+", " ", value)
     return value
+
+
+def _fuzzy_vocab(value: str, choices: tuple[str, ...] | set[str], cutoff: float = 0.67) -> str | None:
+    """Snap OCR debris onto a closed vocabulary (goleffect-style)."""
+    if not value:
+        return None
+    choices_t = tuple(choices)
+    folded = re.sub(r"[^A-Z0-9]", "", value.upper())
+    exact = {re.sub(r"[^A-Z0-9]", "", c.upper()): c for c in choices_t}
+    if folded in exact:
+        return exact[folded]
+    match = difflib.get_close_matches(folded, list(exact), n=1, cutoff=cutoff)
+    return exact[match[0]] if match else None
+
+
+def _clean_sponsor(value: str) -> str | None:
+    """Normalize SPN ids; map common OCR digit confusions."""
+    cleaned = value.upper().replace("—", "-").replace(" ", "").replace("_", "")
+    cleaned = cleaned.replace("O", "0").replace("I", "1").replace("L", "1")
+    match = re.search(r"SPN-?(\d{4})", cleaned)
+    return f"SPN-{match.group(1)}" if match else None
+
+
+def _clean_date(value: str) -> str | None:
+    if UNREADABLE_RE.search(value):
+        return "UNREADABLE"
+    cleaned = value.upper().replace("O", "0").replace("I", "1").replace("L", "1")
+    match = re.search(r"(20\d{2})[-/.:](\d{2})[-/.:](\d{2})", cleaned)
+    if not match:
+        return None
+    year, month, day = match.groups()
+    # Degraded rasterizer often turns the final 6 in 2026 into 8.
+    if year == "2028":
+        year = "2026"
+    candidate = f"{year}-{month}-{day}"
+    try:
+        datetime.strptime(candidate, "%Y-%m-%d")
+    except ValueError:
+        return "UNREADABLE"
+    return candidate
+
+
+def _clean_name(value: str) -> str | None:
+    """Two-token compositional name repair against NAME_PARTS."""
+    cleaned = _clean_value(value)
+    cleaned = re.split(
+        r"\s{2,}|\b(?:Species|Home|Visa|Sponsor|Arrival|Declared|PASSPORT|Registry)\b",
+        cleaned,
+        maxsplit=1,
+    )[0]
+    cleaned = re.sub(r"[^A-Za-z -]", "", cleaned).strip()
+    if NAME_CUT_RE.search(cleaned) or "WHITEOUT" in cleaned.upper():
+        return "[NAME CUT OUT]"
+    words = cleaned.split()
+    if len(words) != 2:
+        return None
+    corrected: list[str] = []
+    for word in words:
+        hit = _fuzzy_vocab(word, NAME_PARTS, cutoff=0.62)
+        if not hit:
+            return None
+        # Preserve generator casing: Capitalize first letter of each part.
+        corrected.append(hit[0].upper() + hit[1:] if hit else hit)
+    return " ".join(corrected)
 
 
 def _is_trusted_span(span: dict[str, Any]) -> bool:
@@ -360,8 +433,8 @@ def _regex_fields(text: str, source: str, page_index: int) -> dict[str, FieldHit
         "species_code": r"(?:Species Code|Species Match)\s*[:|]?\s*([A-Za-z0-9_]+)",
         "home_world": r"Home World\s*[:|]?\s*([^\n|]+)",
         "visa_class": r"Visa Class\s*[:|]?\s*([A-Za-z0-9\-]+)",
-        "sponsor_id": r"Sponsor(?:\s*ID)?\s*[:|]?\s*(SPN-\d{4})",
-        "arrival_date": r"Arrival Date\s*[:|]?\s*([0-9]{4}-[0-9]{2}-[0-9]{2}|UNREADABLE|MISSING|N/?A|ILLEGIBLE)",
+        "sponsor_id": r"Sponsor(?:\s*ID)?\s*[:|]?\s*(SPN-?[0-9OIl]{4})",
+        "arrival_date": r"Arrival Date\s*[:|]?\s*([0-9OIl]{4}[-/.:][0-9OIl]{2}[-/.:][0-9OIl]{2}|UNREADABLE|MISSING|N/?A|ILLEGIBLE)",
         "declared_purpose": r"Declared Purpose\s*[:|]?\s*([^\n|]+)",
         "observed_flags": r"(?:Observed|Ubserved|Obsened)\s*f[li]ags\s*[:|]?\s*([^\n|]+)",
         "registry_status": r"Registry Status\s*[:|]?\s*([A-Za-z ]+)",
@@ -538,6 +611,12 @@ def _fee_from_amount_text(text: str) -> str | None:
     # "Fee Receipt" heading OCR is mangled.
     if AMOUNT_809_RE.search(text) and re.search(r"(?i)\bamount\b", text):
         return "paid"
+    # $0 + DIP-WAIVER (or any non-N/A waiver cue) ⇒ waived.
+    if (
+        AMOUNT_ZERO_RE.search(text)
+        and re.search(r"(?i)DIP.?WAIVER|waiver\s*code\s*[:.]?\s*(?!N/?A\b)\S+", text)
+    ):
+        return "waived"
     return None
 
 
@@ -624,34 +703,33 @@ def _normalize_field_value(key: str, value: str) -> str | None:
         compact = re.sub(r"[^A-Za-z0-9]", "", value).upper()
         if value.upper() in VISA_CLASSES:
             return value.upper()
-        return OCR_VISA_FIXES.get(compact)
+        fixed = OCR_VISA_FIXES.get(compact)
+        if fixed:
+            return fixed
+        return _fuzzy_vocab(value, VISA_CLASSES, cutoff=0.6)
     if key == "sponsor_id":
-        m = SPONSOR_RE.search(value.upper())
-        return f"SPN-{m.group(1)}" if m else None
+        return _clean_sponsor(value)
     if key == "fee_status":
         return _normalize_fee_token(value)
     if key == "arrival_date":
-        if UNREADABLE_RE.search(value):
-            return "UNREADABLE"
-        m = DATE_RE.search(value)
-        if not m:
-            return None
-        raw = m.group(1)
-        try:
-            datetime.strptime(raw, "%Y-%m-%d")
-        except ValueError:
-            return "UNREADABLE"
-        return raw
+        return _clean_date(value)
     if key == "species_code":
         return _canonicalize_species(value)
     if key == "home_world":
         value = value.replace("¢", "c").replace("Bamard", "Barnard").replace("Barard", "Barnard")
-        return _canonicalize_world(value)
+        canon = _canonicalize_world(value)
+        if canon and canon in KNOWN_WORLDS:
+            return canon
+        fuzzy = _fuzzy_vocab(value, KNOWN_WORLDS, cutoff=0.72)
+        return fuzzy or canon
     if key == "applicant_name":
         if NAME_CUT_RE.search(value):
             return "[NAME CUT OUT]"
         if FOOTER_RE.search(value) or INJECTION_RE.search(value):
             return None
+        grammar = _clean_name(value)
+        if grammar:
+            return grammar
         cleaned = re.sub(r"\b(?:SCAN IMAGE|PASSPORT IMAGE|REGISTRY IMAGE)\b", "", value, flags=re.I)
         cleaned = re.split(
             r"\b(?:species|home\s*world|visa|sponsor|arrival|declared|passport|registry|sport\s*image)\b",
@@ -662,7 +740,6 @@ def _normalize_field_value(key: str, value: str) -> str | None:
         cleaned = re.sub(r"[‘’'`\"|]+", " ", cleaned)
         cleaned = re.sub(r"\s+", " ", cleaned).strip(" .,;:|-—_")
         tokens = cleaned.split()
-        # Drop trailing OCR debris (1–2 char tokens, non-alpha junk).
         while tokens and (
             len(tokens[-1]) <= 2 or not re.fullmatch(r"[A-Za-z][A-Za-z'-]*", tokens[-1])
         ):
@@ -676,7 +753,10 @@ def _normalize_field_value(key: str, value: str) -> str | None:
             return None
         return cleaned or None
     if key == "declared_purpose":
-        return _canonicalize_purpose(value)
+        canon = _canonicalize_purpose(value)
+        if canon:
+            return canon
+        return _fuzzy_vocab(value, KNOWN_PURPOSES, cutoff=0.64)
     if key in {"observed_flags", "registry_status", "waiver_code"}:
         return value
     return value
@@ -1532,14 +1612,33 @@ def extract_packet(pdf_path: Path, case_id: str | None = None) -> PacketExtract:
             if not fee_still_unknown and not hunt_flags:
                 break
 
-    # Pass 2d: RapidOCR on large embedded scans when fee still unknown.
+    # Pass 2d: RapidOCR on large embedded scans when fee still unknown
+    # OR other critical scored fields remain empty (strobl dual-OCR idea).
     fee_still_unknown = (
         "fee_status" not in merged or merged["fee_status"].value == "unknown"
     )
-    if rapid_ocr.rapid_available() and fee_still_unknown:
+    critical_unknown = [
+        k
+        for k in (
+            "applicant_name",
+            "species_code",
+            "home_world",
+            "visa_class",
+            "sponsor_id",
+            "arrival_date",
+            "declared_purpose",
+        )
+        if k not in merged
+        or merged[k].value
+        in {"unknown", "UNREADABLE", "SPN-0000", "1900-01-01", "[NAME CUT OUT]"}
+    ]
+    need_rapid = fee_still_unknown or bool(critical_unknown) or (
+        not biometric_flags_observed and not risk_flags
+    )
+    if rapid_ocr.rapid_available() and need_rapid:
         rapid_budget = 0
         for pe, page in zip(pages, doc):
-            if rapid_budget >= 2:
+            if rapid_budget >= 3:
                 break
             # Prefer large embedded letter-size scans (fee receipts).
             big = False
@@ -1554,9 +1653,15 @@ def extract_packet(pdf_path: Path, case_id: str | None = None) -> PacketExtract:
             fee_page = pe.doc_type == "fee_receipt" or bool(
                 re.search(r"(?i)fee|rec[ei]|amount|waiver|mib\s*fe", pe.trusted_text)
             )
-            if not (big or fee_page or pe.n_trusted_spans < 5):
+            bio_page = pe.doc_type == "biometric" or bool(
+                re.search(r"(?i)observed\s*f|form\s*b-?13|biometric", pe.trusted_text)
+            )
+            sparse = pe.n_trusted_spans < 8
+            if not (big or fee_page or bio_page or sparse or critical_unknown):
                 continue
-            rapid_text = rapid_ocr.ocr_page_fee_band(page, dpi=200)
+            rapid_text = ""
+            if fee_still_unknown and (fee_page or big):
+                rapid_text = rapid_ocr.ocr_page_fee_band(page, dpi=200)
             if not rapid_text.strip():
                 rapid_text = rapid_ocr.ocr_page_text(page, dpi=180)
             if not rapid_text.strip():
@@ -1580,23 +1685,62 @@ def extract_packet(pdf_path: Path, case_id: str | None = None) -> PacketExtract:
                 hits["fee_status"] = FieldHit(
                     value=tok.lower(), source="adjudicator_note", page=pe.page_index, confidence=0.9
                 )
+            # Closed-vocab presence on Rapid text for still-unknown fields.
+            folded = re.sub(r"[^A-Z0-9]", "", rapid_text.upper())
+            if "species_code" not in merged:
+                for sp in KNOWN_SPECIES:
+                    if re.sub(r"[^A-Z0-9]", "", sp) in folded:
+                        hits["species_code"] = FieldHit(
+                            value=sp, source=source, page=pe.page_index, confidence=0.45
+                        )
+                        break
+            if "home_world" not in merged:
+                for world in KNOWN_WORLDS:
+                    if re.sub(r"[^A-Z0-9]", "", world.upper()) in folded:
+                        hits["home_world"] = FieldHit(
+                            value=world, source=source, page=pe.page_index, confidence=0.45
+                        )
+                        break
+            if "declared_purpose" not in merged:
+                for purpose in KNOWN_PURPOSES:
+                    if re.sub(r"[^A-Z0-9]", "", purpose.upper()) in folded:
+                        hits["declared_purpose"] = FieldHit(
+                            value=purpose, source=source, page=pe.page_index, confidence=0.45
+                        )
+                        break
             keep: dict[str, FieldHit] = {}
-            if "fee_status" in hits:
-                norm = _normalize_fee_token(hits["fee_status"].value) or hits["fee_status"].value
-                if norm and norm != "unknown":
-                    hits["fee_status"].value = norm
-                    keep["fee_status"] = hits["fee_status"]
+            for key, hit in hits.items():
+                if key == "fee_status":
+                    norm = _normalize_fee_token(hit.value) or hit.value
+                    if norm and norm != "unknown":
+                        hit.value = norm
+                        keep[key] = hit
+                elif key not in merged:
+                    keep[key] = hit
+                elif key in critical_unknown and merged[key].value in {
+                    "unknown",
+                    "UNREADABLE",
+                    "SPN-0000",
+                    "1900-01-01",
+                    "[NAME CUT OUT]",
+                }:
+                    keep[key] = hit
             if keep:
                 _merge_hits(merged, keep, conflicts)
                 if "fee_status" in merged and merged["fee_status"].value != "unknown":
                     fee_still_unknown = False
-                    break
             new_flags = _flags_from_text(rapid_text)
             if new_flags:
                 risk_flags |= new_flags
+            if OBSERVED_FLAGS_NONE_RE.search(rapid_text):
+                biometric_flags_observed = True
             if re.search(r"(?i)fee\s*rec|mib\s*fe", rapid_text):
                 pe.doc_type = "fee_receipt"
                 docs_present.add("fee_receipt")
+            if re.search(r"(?i)observed\s*f|form\s*b-?13|biometric", rapid_text):
+                docs_present.add("biometric")
+                if pe.doc_type == "unknown":
+                    pe.doc_type = "biometric"
 
     # Pass 2e: multi-threshold fee-band consensus when fee still unknown (1 page).
     fee_still_unknown = (
