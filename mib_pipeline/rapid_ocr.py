@@ -8,6 +8,7 @@ and may only *add* non-none risk flags. Never invents approvals by itself.
 from __future__ import annotations
 
 import io
+import os
 import threading
 from typing import Any
 
@@ -36,6 +37,8 @@ def _get_engine() -> Any | None:
 
 
 def rapid_available() -> bool:
+    if os.environ.get("MIB_NO_RAPID", "").strip() in {"1", "true", "yes"}:
+        return False
     return _get_engine() is not None
 
 
