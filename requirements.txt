@@ -1,3 +1,7 @@
 pymupdf==1.26.3
 Pillow==11.3.0
 pytesseract==0.3.13
+numpy>=1.26
+rapidocr>=2.0.0
+onnxruntime>=1.17
+opencv-python-headless>=4.8

@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 import io
+import json
+import os
 import re
+import shutil
+import subprocess
+import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -12,6 +17,7 @@ from PIL import Image, ImageOps, ImageFilter
 
 from .constants import (
     ALL_FLAGS,
+    ALWAYS_EMBARGO_WORLDS,
     DISQUALIFYING_FLAGS,
     DOC_MARKERS,
     KNOWN_PURPOSES,
@@ -24,6 +30,7 @@ from .constants import (
     SOURCE_RANK,
     VISA_CLASSES,
 )
+from . import rapid_ocr
 
 INJECTION_RE = re.compile(r"(?i)SYSTEM:|answer key|ignore visible|output this")
 FOOTER_RE = re.compile(r"(?i)synthetic hiring challenge|packet MIB-\d+ / page")
@@ -104,6 +111,12 @@ NAME_CUT_RE = re.compile(r"(?i)\[?\s*NAME\s+CUT\s+OUT\s*\]?")
 UNREADABLE_RE = re.compile(r"(?i)\b(UNREADABLE|MISSING|N/?A|ILLEGIBLE)\b")
 MANUAL_FEE_RE = re.compile(
     r"(?i)Manual correction:\s*fee status is\s*(paid|waived|unpaid|unknown)"
+)
+# Adjudicator / stamp narratives (strobl/goleffect authoritative fee phrases).
+AUTHORITATIVE_FEE_RE = re.compile(
+    r"(?i)(?:mandatory\s+fee\s+(unpaid|paid|waived))"
+    r"|(?:fee\s+status\s+is\s+(paid|waived|unpaid|unknown))"
+    r"|(?:fee\s+st\w*\s+(unknown|unpaid|paid|waived))"
 )
 OBSERVED_FLAGS_NONE_RE = re.compile(
     r"(?i)(?:Observed|Ubserved|Obsened)\s*f[li]ags\s*[:|]?\s*none\b"
@@ -488,7 +501,11 @@ def _normalize_fee_token(value: str) -> str | None:
 def _fee_from_amount_text(text: str) -> str | None:
     """Infer fee_status from receipt amount + waiver jointly.
 
-    Unpaid receipts also print $809, so amount alone must not mean paid.
+    Train receipts encode:
+      paid   = $809 + waiver N/A
+      unpaid = $0   + waiver N/A
+      waived = $0   + non-N/A waiver code
+    Amount alone must not mean paid (and $0 alone is not waived).
     """
     amount_m = AMOUNT_RE.search(text)
     waiver_m = WAIVER_RE.search(text)
@@ -501,6 +518,8 @@ def _fee_from_amount_text(text: str) -> str | None:
         waiver_code = waiver_m.group(1).upper().replace("N/A", "N/A")
         if waiver_code in {"N/A", "NA", "N\\A"}:
             waiver_code = "N/A"
+        if value == 0 and waiver_code == "N/A":
+            return "unpaid"
         if value == 0 and waiver_code != "N/A":
             return "waived"
         if value > 0 and waiver_code == "N/A":
@@ -511,9 +530,14 @@ def _fee_from_amount_text(text: str) -> str | None:
             AMOUNT_ZERO_RE.search(text) or (amount_m and float(amount_m.group(1)) == 0)
         ):
             return "waived"
-    # Zero-dollar receipt without parsed waiver is almost always waived.
-    if receipt_like and AMOUNT_ZERO_RE.search(text):
-        return "waived"
+    # $809 on a receipt without a parsed waiver is usually paid; never treat
+    # bare $0 as waived (that collides with unpaid's N/A waiver pattern).
+    if receipt_like and AMOUNT_809_RE.search(text) and not waiver_m:
+        return "paid"
+    # Goleffect-style: explicit Amount $809.00 line is paid even if the
+    # "Fee Receipt" heading OCR is mangled.
+    if AMOUNT_809_RE.search(text) and re.search(r"(?i)\bamount\b", text):
+        return "paid"
     return None
 
 
@@ -723,6 +747,31 @@ def _fuzzy_flag_token(token: str) -> str | None:
     return None
 
 
+def _fuzzy_risk_mentions(text: str) -> set[str]:
+    """Recover badly OCRed flag names, only from flag/reason contexts.
+
+    Global fuzzy matching invents flags from words like "biometric"; gate on
+    observed-flags / risk / reason / finding lines (goleffect-style).
+    """
+    found: set[str] = set()
+    for line in text.splitlines():
+        if not re.search(r"(?i)\b(?:obs\w*|flags?|risk|reason|finding|warrant|hazard|embargo)\b", line):
+            continue
+        compact = re.sub(r"[^a-z0-9]", "", line.lower())
+        for flag in ALL_FLAGS:
+            target = flag.replace("_", "")
+            if target and target in compact:
+                found.add(flag)
+                continue
+            # Mild OCR: allow one-char deletion in the compact flag name.
+            for needles in FLAG_FUZZY.get(flag, ()):
+                needle = re.sub(r"[^a-z0-9]", "", needles)
+                if len(needle) >= 6 and needle in compact:
+                    found.add(flag)
+                    break
+    return found
+
+
 def _flags_from_text(text: str) -> set[str]:
     found: set[str] = set()
     for name, pat in FLAG_PATTERNS.items():
@@ -743,13 +792,64 @@ def _flags_from_text(text: str) -> set[str]:
         found.add("planetary_embargo")
     if RESCIND_RE.search(text):
         found.add("rescinded_denial")
+    found |= _fuzzy_risk_mentions(text)
     return found
+
+
+def _fee_crop_consensus_chunks(img: Image.Image) -> list[str]:
+    """Multi-threshold binary OCR of the fee header band (strobl-style)."""
+    try:
+        import pytesseract
+    except ImportError:
+        return []
+    w, h = img.size
+    header = img.crop((0, 0, w, max(1, int(h * 0.35))))
+    gray = ImageOps.autocontrast(ImageOps.grayscale(header))
+    chunks: list[str] = []
+    for thr in (130, 160):
+        binary = gray.point(lambda x, t=thr: 255 if x > t else 0)
+        try:
+            chunks.append(pytesseract.image_to_string(binary, config="--psm 6"))
+        except Exception:
+            pass
+    up = gray.resize((gray.width * 2, gray.height * 2), Image.Resampling.LANCZOS)
+    try:
+        chunks.append(pytesseract.image_to_string(up, config="--psm 11"))
+    except Exception:
+        pass
+    return [c for c in chunks if c.strip()]
+
+
+def _consensus_fee_from_chunks(chunks: list[str]) -> str | None:
+    """Require ≥2 agreeing fee inferences across OCR variants."""
+    votes: dict[str, int] = {}
+    for text in chunks:
+        if not text.strip():
+            continue
+        tok = _fee_status_capture(text)
+        norm = _normalize_fee_token(tok) if tok else None
+        if not norm or norm == "unknown":
+            norm = _fee_from_amount_text(text)
+        if norm and norm != "unknown":
+            votes[norm] = votes.get(norm, 0) + 1
+    if not votes:
+        return None
+    best = max(votes, key=votes.get)
+    if votes[best] >= 2:
+        return best
+    # Single strong amount+waiver hit is enough.
+    if best in {"paid", "waived", "unpaid"}:
+        for text in chunks:
+            if _fee_from_amount_text(text) == best:
+                return best
+    return None
 
 
 def _ocr_image(
     img: Image.Image,
     try_rotate: bool = False,
     fee_boost: bool = False,
+    second_pass: bool = False,
 ) -> str:
     try:
         import pytesseract
@@ -761,22 +861,24 @@ def _ocr_image(
     # Mid/lower band often holds "Observed flags" on biometric slips.
     mid = img.crop((0, int(h * 0.25), w, min(h, int(h * 0.75))))
 
-    def _run(target: Image.Image, sharpen: bool = False) -> None:
+    def _run(target: Image.Image, sharpen: bool = False, psm: int = 6) -> None:
         gray = ImageOps.autocontrast(ImageOps.grayscale(target))
         if sharpen:
             gray = gray.filter(ImageFilter.SHARPEN)
         try:
-            chunks.append(pytesseract.image_to_string(gray, config="--psm 6"))
+            chunks.append(pytesseract.image_to_string(gray, config=f"--psm {psm}"))
         except Exception:
             pass
 
     # Plain autocontrast preserves faint flag lines; sharpen helps titles/IDs.
-    _run(header, sharpen=False)
-    _run(img, sharpen=False)
-    _run(mid, sharpen=False)
-    _run(img, sharpen=True)
+    # When second_pass-only, skip the base reads (already done in pass 2).
+    if not second_pass or fee_boost:
+        _run(header, sharpen=False)
+        _run(img, sharpen=False)
+        _run(mid, sharpen=False)
+        _run(img, sharpen=True)
 
-    if fee_boost:
+    if fee_boost and not second_pass:
         gray_h = ImageOps.autocontrast(ImageOps.grayscale(header))
         # Light binary helps stamped fee headers.
         for thr in (140, 160):
@@ -810,6 +912,33 @@ def _ocr_image(
         except Exception:
             pass
 
+    # Guarded second pass: alternate PSM / invert / stronger binary — only used
+    # when fee is still unknown or risk flags are empty on image pages.
+    # Keep this cheap: a few targeted reads, not a full OCR rewrite.
+    if second_pass:
+        gray = ImageOps.autocontrast(ImageOps.grayscale(img))
+        try:
+            chunks.append(pytesseract.image_to_string(gray, config="--psm 4"))
+        except Exception:
+            pass
+        try:
+            inv = ImageOps.invert(gray)
+            chunks.append(pytesseract.image_to_string(inv, config="--psm 6"))
+        except Exception:
+            pass
+        binary = gray.point(lambda x: 255 if x > 150 else 0)
+        try:
+            chunks.append(pytesseract.image_to_string(binary, config="--psm 11"))
+        except Exception:
+            pass
+        # Flag / observed-flags band (lower half of biometric slips).
+        lower = img.crop((0, int(h * 0.40), w, h))
+        lower_g = ImageOps.autocontrast(ImageOps.grayscale(lower))
+        try:
+            chunks.append(pytesseract.image_to_string(lower_g, config="--psm 6"))
+        except Exception:
+            pass
+
     if try_rotate:
         gray = ImageOps.autocontrast(ImageOps.grayscale(img))
         for angle in (90, 270):
@@ -829,6 +958,7 @@ def _ocr_page(
     try_rotate: bool = False,
     fee_boost: bool = False,
     risk_contrast: bool = False,
+    second_pass: bool = False,
 ) -> str:
     parts: list[str] = []
     embedded_ok = False
@@ -845,7 +975,12 @@ def _ocr_page(
                 continue
             img = Image.open(io.BytesIO(pix.tobytes("png")))
             parts.append(
-                _ocr_image(img, try_rotate=try_rotate, fee_boost=fee_boost)
+                _ocr_image(
+                    img,
+                    try_rotate=try_rotate,
+                    fee_boost=fee_boost,
+                    second_pass=second_pass,
+                )
             )
             if parts[-1].strip():
                 embedded_ok = True
@@ -854,12 +989,23 @@ def _ocr_page(
     # Always raster sparse / footer-only pages — embedded OCR can be empty
     # even when a large scan exists, and portraits shouldn't block recovery.
     page_text_len = len((page.get_text() or "").strip())
-    if not embedded_ok or page_text_len < 100:
+    embedded_text = "\n".join(p for p in parts if p.strip())
+    if second_pass:
+        need_raster = (not embedded_ok) or (len(embedded_text.strip()) < 40)
+    else:
+        need_raster = (not embedded_ok) or page_text_len < 100
+    if need_raster:
         try:
-            pix = page.get_pixmap(dpi=dpi)
+            use_dpi = 220 if second_pass else dpi
+            pix = page.get_pixmap(dpi=use_dpi)
             img = Image.open(io.BytesIO(pix.tobytes("png")))
             parts.append(
-                _ocr_image(img, try_rotate=try_rotate, fee_boost=fee_boost)
+                _ocr_image(
+                    img,
+                    try_rotate=try_rotate,
+                    fee_boost=False if second_pass else fee_boost,
+                    second_pass=second_pass,
+                )
             )
         except Exception:
             pass
@@ -883,6 +1029,112 @@ def _ocr_page(
         except Exception:
             pass
     return joined
+
+
+def _tesseract_image_file(image_path: Path, psms: tuple[str, ...] = ("3", "11")) -> str:
+    chunks: list[str] = []
+    for psm in psms:
+        try:
+            cp = subprocess.run(
+                ["tesseract", image_path.name, "stdout", "--psm", psm],
+                cwd=str(image_path.parent),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                errors="replace",
+                timeout=20,
+                check=False,
+            )
+            if cp.returncode == 0 and cp.stdout:
+                chunks.append(cp.stdout)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    return "\n".join(chunks)
+
+
+def _full_document_ocr(pdf_path: Path, dpi: int = 150) -> list[str]:
+    """Render-first OCR of every page (goleffect/strobl idea, our implementation).
+
+    Prefer pdftoppm+tesseract when available; fall back to PyMuPDF pixmaps.
+    Returns one text blob per page.
+    """
+    pdf_path = Path(pdf_path)
+    cache_root = os.environ.get("MIB_OCR_CACHE")
+    cache_file = Path(cache_root, pdf_path.stem + ".json") if cache_root else None
+    if cache_file and cache_file.exists():
+        try:
+            data = json.loads(cache_file.read_text(encoding="utf-8"))
+            if isinstance(data, list):
+                return [str(x) for x in data]
+        except Exception:
+            pass
+
+    page_texts: list[str] = []
+    pdftoppm = shutil.which("pdftoppm")
+    if pdftoppm:
+        with tempfile.TemporaryDirectory(prefix="mib-ocr-") as tmp:
+            work = Path(tmp)
+            prefix = work / "page"
+            try:
+                subprocess.run(
+                    [
+                        pdftoppm,
+                        "-jpeg",
+                        "-jpegopt",
+                        "quality=85",
+                        "-r",
+                        str(dpi),
+                        str(pdf_path),
+                        str(prefix),
+                    ],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=45,
+                    check=False,
+                )
+            except (OSError, subprocess.TimeoutExpired):
+                return []
+            images = sorted(work.glob("page-*.jpg"))
+            for image in images:
+                page_texts.append(_tesseract_image_file(image))
+    else:
+        try:
+            import pytesseract
+        except ImportError:
+            pytesseract = None  # type: ignore[assignment]
+        try:
+            doc = fitz.open(pdf_path)
+        except Exception:
+            return []
+        for page in doc:
+            try:
+                pix = page.get_pixmap(dpi=dpi)
+                img = Image.open(io.BytesIO(pix.tobytes("png")))
+            except Exception:
+                page_texts.append("")
+                continue
+            chunks: list[str] = []
+            gray = ImageOps.autocontrast(ImageOps.grayscale(img))
+            if pytesseract is not None:
+                for psm in (3, 11):
+                    try:
+                        chunks.append(pytesseract.image_to_string(gray, config=f"--psm {psm}"))
+                    except Exception:
+                        pass
+            else:
+                with tempfile.TemporaryDirectory(prefix="mib-page-") as tmp:
+                    path = Path(tmp) / "page.png"
+                    gray.save(path)
+                    chunks.append(_tesseract_image_file(path))
+            page_texts.append("\n".join(c for c in chunks if c.strip()))
+
+    if cache_file and page_texts:
+        try:
+            cache_file.parent.mkdir(parents=True, exist_ok=True)
+            cache_file.write_text(json.dumps(page_texts), encoding="utf-8")
+        except Exception:
+            pass
+    return page_texts
 
 
 def _page_needs_ocr(page_extract: PageExtract, critical_missing: bool) -> bool:
@@ -944,6 +1196,7 @@ def extract_packet(pdf_path: Path, case_id: str | None = None) -> PacketExtract:
     risk_flags: set[str] = set()
     used_ocr = False
     trusted_span_count = 0
+    biometric_flags_observed = False
 
     # Pass 1: trusted text layer
     for i, page in enumerate(doc):
@@ -984,78 +1237,182 @@ def extract_packet(pdf_path: Path, case_id: str | None = None) -> PacketExtract:
                     )
         pages.append(pe)
 
-    critical_keys = ["applicant_name", "visa_class", "fee_status", "arrival_date", "species_code"]
-    critical_missing = any(k not in merged for k in critical_keys)
-    image_heavy = trusted_span_count < 12
-    biometric_flags_observed = False
-
-    # Pass 2: ALWAYS OCR pages with n_trusted_spans < 10 (biometric/flag/fee scans),
-    # plus other pages when critical fields are still missing.
-    for pe, page in zip(pages, doc):
-        if not _page_needs_ocr(pe, critical_missing or image_heavy):
-            continue
-        ocr_text = _ocr_page(page, doc, fee_boost=False, risk_contrast=True)
-        if not ocr_text.strip():
-            continue
+    # Pass 1.5: ALWAYS render-OCR the full packet at 150 DPI (goleffect-style).
+    # This is the main extraction unlock vs selective sparse-page OCR alone.
+    full_ocr_pages = _full_document_ocr(pdf_path, dpi=150)
+    if full_ocr_pages:
         used_ocr = True
-        pe.used_ocr = True
-        pe.trusted_text = (pe.trusted_text + "\n" + ocr_text).strip()
-        # Never promote OCR to native doc-type ranks — garbled OCR was overwriting
-        # clean intake visa/name with attestation debris (Afifi ranks OCR lower).
-        ocr_doc = _detect_doc_type(ocr_text)
-        if ocr_doc != "unknown":
-            pe.doc_type = ocr_doc
-            docs_present.add(ocr_doc)
-        if re.search(r"(?i)fee\s*rec|mib\s*fe", ocr_text):
-            pe.doc_type = "fee_receipt"
-            docs_present.add("fee_receipt")
-            ocr_doc = "fee_receipt"
-        source = f"ocr_{ocr_doc}" if ocr_doc != "unknown" else "ocr"
-        hits = _regex_fields(ocr_text, source, pe.page_index)
-        raw_fee = hits.get("fee_status")
-        if raw_fee is None or _normalize_fee_token(raw_fee.value) is None:
-            amt = _fee_from_amount_text(ocr_text)
-            if amt:
-                hits["fee_status"] = FieldHit(
-                    value=amt, source=source, page=pe.page_index, confidence=0.55
-                )
-        for h in hits.values():
-            h.confidence *= 0.75
-            h.source = source
-        _merge_hits(pe.fields, hits, [])
-        _merge_hits(merged, hits, conflicts)
-        risk_flags |= _flags_from_text(ocr_text)
-        if OBSERVED_FLAGS_NONE_RE.search(ocr_text) or hits.get("observed_flags"):
-            biometric_flags_observed = True
-        fm = FINDING_RE.search(ocr_text)
-        if fm:
-            finding = _normalize_finding(fm.group(1))
-            if finding:
+        for pe, ocr_text in zip(pages, full_ocr_pages):
+            if not ocr_text or not ocr_text.strip():
+                continue
+            pe.used_ocr = True
+            pe.trusted_text = (pe.trusted_text + "\n" + ocr_text).strip()
+            ocr_doc = _detect_doc_type(ocr_text)
+            if ocr_doc != "unknown":
+                pe.doc_type = ocr_doc
+                docs_present.add(ocr_doc)
+            if re.search(r"(?i)fee\s*rec|mib\s*fe", ocr_text):
+                pe.doc_type = "fee_receipt"
+                docs_present.add("fee_receipt")
+                ocr_doc = "fee_receipt"
+            source = f"ocr_{ocr_doc}" if ocr_doc != "unknown" else "ocr"
+            hits = _regex_fields(ocr_text, source, pe.page_index)
+            raw_fee = hits.get("fee_status")
+            if raw_fee is None or _normalize_fee_token(raw_fee.value) is None:
+                amt = _fee_from_amount_text(ocr_text)
+                if amt:
+                    hits["fee_status"] = FieldHit(
+                        value=amt, source=source, page=pe.page_index, confidence=0.7
+                    )
+            # Closed-vocab presence recovery on recognized pages.
+            folded = re.sub(r"[^A-Z0-9]", "", ocr_text.upper())
+            if ocr_doc in {"intake", "registry", "biometric", "sponsor_letter", "fee_receipt", "unknown"}:
+                if "visa_class" not in hits:
+                    for visa in VISA_CLASSES:
+                        if re.sub(r"[^A-Z0-9]", "", visa) in folded:
+                            hits["visa_class"] = FieldHit(
+                                value=visa, source=source, page=pe.page_index, confidence=0.55
+                            )
+                            break
+                if "species_code" not in hits:
+                    for sp in KNOWN_SPECIES:
+                        if re.sub(r"[^A-Z0-9]", "", sp) in folded:
+                            hits["species_code"] = FieldHit(
+                                value=sp, source=source, page=pe.page_index, confidence=0.55
+                            )
+                            break
+                if "home_world" not in hits:
+                    for world in KNOWN_WORLDS:
+                        if re.sub(r"[^A-Z0-9]", "", world.upper()) in folded:
+                            hits["home_world"] = FieldHit(
+                                value=world, source=source, page=pe.page_index, confidence=0.55
+                            )
+                            break
+                if "declared_purpose" not in hits:
+                    for purpose in KNOWN_PURPOSES:
+                        compact_p = re.sub(r"[^A-Z0-9]", "", purpose.upper())
+                        if len(compact_p) >= 6 and compact_p in folded:
+                            hits["declared_purpose"] = FieldHit(
+                                value=purpose, source=source, page=pe.page_index, confidence=0.5
+                            )
+                            break
+            for h in hits.values():
+                h.confidence *= 0.85
+                h.source = source
+            _merge_hits(pe.fields, hits, [])
+            _merge_hits(merged, hits, conflicts)
+            risk_flags |= _flags_from_text(ocr_text)
+            auth = AUTHORITATIVE_FEE_RE.search(ocr_text)
+            if auth:
+                tok = next(g for g in auth.groups() if g)
                 _merge_hits(
                     merged,
                     {
-                        "manual_finding": FieldHit(
-                            value=finding,
+                        "fee_status": FieldHit(
+                            value=tok.lower(),
                             source="adjudicator_note",
                             page=pe.page_index,
-                            confidence=0.8,
+                            confidence=0.95,
                         )
                     },
                     conflicts,
                 )
+            if OBSERVED_FLAGS_NONE_RE.search(ocr_text) or hits.get("observed_flags"):
+                biometric_flags_observed = True
+            fm = FINDING_RE.search(ocr_text)
+            if fm:
+                finding = _normalize_finding(fm.group(1))
+                if finding and "SAMPLE" not in ocr_text.upper():
+                    _merge_hits(
+                        merged,
+                        {
+                            "manual_finding": FieldHit(
+                                value=finding,
+                                source="adjudicator_note",
+                                page=pe.page_index,
+                                confidence=0.85,
+                            )
+                        },
+                        conflicts,
+                    )
 
-    # Pass 2b: fee still missing → header 2x/binary OCR on sparse pages that
-    # already look like fee receipts (avoid re-OCR of every biometric slip).
-    if "fee_status" not in merged:
+    critical_keys = ["applicant_name", "visa_class", "fee_status", "arrival_date", "species_code"]
+    critical_missing = any(k not in merged for k in critical_keys)
+    image_heavy = trusted_span_count < 12
+
+    # Pass 2: selective boost OCR only if full OCR unavailable.
+    if not full_ocr_pages:
         for pe, page in zip(pages, doc):
-            if pe.n_trusted_spans >= 10:
+            if not _page_needs_ocr(pe, critical_missing or image_heavy):
                 continue
-            if not page.get_images():
+            ocr_text = _ocr_page(page, doc, fee_boost=False, risk_contrast=True)
+            if not ocr_text.strip():
+                continue
+            used_ocr = True
+            pe.used_ocr = True
+            pe.trusted_text = (pe.trusted_text + "\n" + ocr_text).strip()
+            ocr_doc = _detect_doc_type(ocr_text)
+            if ocr_doc != "unknown":
+                pe.doc_type = ocr_doc
+                docs_present.add(ocr_doc)
+            if re.search(r"(?i)fee\s*rec|mib\s*fe", ocr_text):
+                pe.doc_type = "fee_receipt"
+                docs_present.add("fee_receipt")
+                ocr_doc = "fee_receipt"
+            source = f"ocr_{ocr_doc}" if ocr_doc != "unknown" else "ocr"
+            hits = _regex_fields(ocr_text, source, pe.page_index)
+            raw_fee = hits.get("fee_status")
+            if raw_fee is None or _normalize_fee_token(raw_fee.value) is None:
+                amt = _fee_from_amount_text(ocr_text)
+                if amt:
+                    hits["fee_status"] = FieldHit(
+                        value=amt, source=source, page=pe.page_index, confidence=0.55
+                    )
+            for h in hits.values():
+                h.confidence *= 0.75
+                h.source = source
+            _merge_hits(pe.fields, hits, [])
+            _merge_hits(merged, hits, conflicts)
+            risk_flags |= _flags_from_text(ocr_text)
+            if OBSERVED_FLAGS_NONE_RE.search(ocr_text) or hits.get("observed_flags"):
+                biometric_flags_observed = True
+            fm = FINDING_RE.search(ocr_text)
+            if fm:
+                finding = _normalize_finding(fm.group(1))
+                if finding:
+                    _merge_hits(
+                        merged,
+                        {
+                            "manual_finding": FieldHit(
+                                value=finding,
+                                source="adjudicator_note",
+                                page=pe.page_index,
+                                confidence=0.8,
+                            )
+                        },
+                        conflicts,
+                    )
+
+    # Pass 2b: fee still missing/unknown → header 2x/binary OCR on sparse pages
+    # that look like fee receipts (avoid re-OCR of every biometric slip).
+    fee_hit = merged.get("fee_status")
+    fee_needs_boost = fee_hit is None or fee_hit.value == "unknown"
+    if fee_needs_boost:
+        for pe, page in zip(pages, doc):
+            if pe.n_trusted_spans >= 10 and not page.get_images():
+                continue
+            if not page.get_images() and pe.n_trusted_spans >= 10:
                 continue
             hint = pe.trusted_text
-            if not re.search(r"(?i)fee|rec[ei]|amount|\$\s*\d|sta[tuswys]", hint):
+            if not re.search(
+                r"(?i)fee|rec[ei]|amount|\$\s*\d|sta[tuswys]|rezo|reza|recast",
+                hint,
+            ):
                 # Still try completely blank scan pages (footer-only) once
-                if pe.n_trusted_spans > 3:
+                if pe.n_trusted_spans > 3 and not page.get_images():
+                    continue
+                if pe.n_trusted_spans > 3 and page.get_images() and pe.n_trusted_spans >= 8:
+                    # Image page without fee cue — leave for guarded second pass.
                     continue
             ocr_text = _ocr_page(page, doc, fee_boost=True)
             if not ocr_text.strip():
@@ -1064,7 +1421,7 @@ def extract_packet(pdf_path: Path, case_id: str | None = None) -> PacketExtract:
             pe.used_ocr = True
             pe.trusted_text = (pe.trusted_text + "\n" + ocr_text).strip()
             source = "ocr_fee_receipt"
-            if re.search(r"(?i)fee\s*rec|mib\s*fe", ocr_text):
+            if re.search(r"(?i)fee\s*rec|mib\s*fe|fee\s*rez|recast", ocr_text):
                 pe.doc_type = "fee_receipt"
                 docs_present.add("fee_receipt")
             hits = _regex_fields(ocr_text, source, pe.page_index)
@@ -1080,7 +1437,214 @@ def extract_packet(pdf_path: Path, case_id: str | None = None) -> PacketExtract:
                 h.source = source
             _merge_hits(merged, hits, conflicts)
             risk_flags |= _flags_from_text(ocr_text)
-            if "fee_status" in merged:
+            if "fee_status" in merged and merged["fee_status"].value != "unknown":
+                break
+
+    # Pass 2c: guarded second OCR — ONLY when fee still unknown on a garble
+    # fee-receipt page, or when risk flags are empty on biometric-looking image
+    # pages. Fills unknown fee / missing flags only (no full RapidOCR rewrite).
+    fee_still_unknown = (
+        "fee_status" not in merged or merged["fee_status"].value == "unknown"
+    )
+    fee_garble_pages = [
+        (pe, page)
+        for pe, page in zip(pages, doc)
+        if fee_still_unknown
+        and (
+            re.search(r"(?i)fee\s*rez|rezo|reza|recast|fe[eag]\s*rec|mib\s*fe", pe.trusted_text)
+            or (pe.doc_type == "fee_receipt" and pe.n_trusted_spans < 10)
+        )
+    ]
+    bio_candidate_pages = [
+        (pe, page)
+        for pe, page in zip(pages, doc)
+        if (
+            (pe.n_trusted_spans < 10 or bool(page.get_images()))
+            and (
+                pe.doc_type == "biometric"
+                or re.search(
+                    r"(?i)b-?13|biometric|observed\s*f|warrant|hazard|tamper",
+                    pe.trusted_text,
+                )
+                or (pe.n_trusted_spans < 4 and bool(page.get_images()))
+            )
+        )
+    ]
+    hunt_flags = (not risk_flags) and bool(bio_candidate_pages)
+    targets: list[tuple] = []
+    seen_pages: set[int] = set()
+    for pe, page in fee_garble_pages + (bio_candidate_pages if hunt_flags else []):
+        if pe.page_index in seen_pages:
+            continue
+        seen_pages.add(pe.page_index)
+        targets.append((pe, page))
+    if targets:
+        second_budget = 0
+        for pe, page in targets:
+            if second_budget >= 2:
+                break
+            ocr_text = _ocr_page(
+                page,
+                doc,
+                dpi=200,
+                fee_boost=False,
+                second_pass=True,
+                risk_contrast=hunt_flags and pe.doc_type in {"biometric", "unknown"},
+            )
+            second_budget += 1
+            if not ocr_text.strip():
+                continue
+            used_ocr = True
+            pe.used_ocr = True
+            pe.trusted_text = (pe.trusted_text + "\n" + ocr_text).strip()
+            if re.search(r"(?i)fee\s*rec|mib\s*fe|fee\s*rez|recast", ocr_text):
+                pe.doc_type = "fee_receipt"
+                docs_present.add("fee_receipt")
+            if re.search(r"(?i)observed\s*f|form\s*b-?13|biometric", ocr_text):
+                docs_present.add("biometric")
+                if pe.doc_type == "unknown":
+                    pe.doc_type = "biometric"
+            source = "ocr"
+            if fee_still_unknown:
+                hits = _regex_fields(ocr_text, source, pe.page_index)
+                raw_fee = hits.get("fee_status")
+                if raw_fee is None or _normalize_fee_token(raw_fee.value) is None:
+                    amt = _fee_from_amount_text(ocr_text)
+                    if amt:
+                        hits["fee_status"] = FieldHit(
+                            value=amt, source=source, page=pe.page_index, confidence=0.45
+                        )
+                keep: dict[str, FieldHit] = {}
+                if "fee_status" in hits:
+                    keep["fee_status"] = hits["fee_status"]
+                for h in keep.values():
+                    h.confidence *= 0.65
+                    h.source = source
+                _merge_hits(merged, keep, conflicts)
+                if "fee_status" in merged and merged["fee_status"].value != "unknown":
+                    fee_still_unknown = False
+            new_flags = _flags_from_text(ocr_text)
+            if hunt_flags and new_flags:
+                risk_flags |= new_flags
+                hunt_flags = False
+            if OBSERVED_FLAGS_NONE_RE.search(ocr_text):
+                biometric_flags_observed = True
+            if not fee_still_unknown and not hunt_flags:
+                break
+
+    # Pass 2d: RapidOCR on large embedded scans when fee still unknown.
+    fee_still_unknown = (
+        "fee_status" not in merged or merged["fee_status"].value == "unknown"
+    )
+    if rapid_ocr.rapid_available() and fee_still_unknown:
+        rapid_budget = 0
+        for pe, page in zip(pages, doc):
+            if rapid_budget >= 2:
+                break
+            # Prefer large embedded letter-size scans (fee receipts).
+            big = False
+            for img in page.get_images() or []:
+                try:
+                    pix = fitz.Pixmap(doc, img[0])
+                    if pix.width >= 800 or pix.height >= 800:
+                        big = True
+                        break
+                except Exception:
+                    continue
+            fee_page = pe.doc_type == "fee_receipt" or bool(
+                re.search(r"(?i)fee|rec[ei]|amount|waiver|mib\s*fe", pe.trusted_text)
+            )
+            if not (big or fee_page or pe.n_trusted_spans < 5):
+                continue
+            rapid_text = rapid_ocr.ocr_page_fee_band(page, dpi=200)
+            if not rapid_text.strip():
+                rapid_text = rapid_ocr.ocr_page_text(page, dpi=180)
+            if not rapid_text.strip():
+                continue
+            rapid_budget += 1
+            used_ocr = True
+            pe.used_ocr = True
+            pe.trusted_text = (pe.trusted_text + "\n" + rapid_text).strip()
+            source = "ocr"
+            hits = _regex_fields(rapid_text, source, pe.page_index)
+            raw_fee = hits.get("fee_status")
+            if raw_fee is None or _normalize_fee_token(raw_fee.value) is None:
+                amt = _fee_from_amount_text(rapid_text)
+                if amt:
+                    hits["fee_status"] = FieldHit(
+                        value=amt, source=source, page=pe.page_index, confidence=0.55
+                    )
+            auth = AUTHORITATIVE_FEE_RE.search(rapid_text)
+            if auth:
+                tok = next(g for g in auth.groups() if g)
+                hits["fee_status"] = FieldHit(
+                    value=tok.lower(), source="adjudicator_note", page=pe.page_index, confidence=0.9
+                )
+            keep: dict[str, FieldHit] = {}
+            if "fee_status" in hits:
+                norm = _normalize_fee_token(hits["fee_status"].value) or hits["fee_status"].value
+                if norm and norm != "unknown":
+                    hits["fee_status"].value = norm
+                    keep["fee_status"] = hits["fee_status"]
+            if keep:
+                _merge_hits(merged, keep, conflicts)
+                if "fee_status" in merged and merged["fee_status"].value != "unknown":
+                    fee_still_unknown = False
+                    break
+            new_flags = _flags_from_text(rapid_text)
+            if new_flags:
+                risk_flags |= new_flags
+            if re.search(r"(?i)fee\s*rec|mib\s*fe", rapid_text):
+                pe.doc_type = "fee_receipt"
+                docs_present.add("fee_receipt")
+
+    # Pass 2e: multi-threshold fee-band consensus when fee still unknown (1 page).
+    fee_still_unknown = (
+        "fee_status" not in merged or merged["fee_status"].value == "unknown"
+    )
+    if fee_still_unknown:
+        for pe, page in zip(pages, doc):
+            if pe.n_trusted_spans >= 14 and not page.get_images():
+                continue
+            hint = pe.trusted_text
+            if not (
+                pe.doc_type == "fee_receipt"
+                or re.search(r"(?i)fee|rec[ei]|amount|waiver|\$\s*\d", hint)
+                or (pe.n_trusted_spans < 4 and page.get_images())
+            ):
+                continue
+            try:
+                pix = page.get_pixmap(dpi=180)
+                img = Image.open(io.BytesIO(pix.tobytes("png")))
+            except Exception:
+                continue
+            chunks = _fee_crop_consensus_chunks(img)
+            if not chunks:
+                continue
+            consensus_text = "\n".join(chunks)
+            used_ocr = True
+            pe.used_ocr = True
+            pe.trusted_text = (pe.trusted_text + "\n" + consensus_text).strip()
+            fee_val = _consensus_fee_from_chunks(chunks)
+            if fee_val is None:
+                fee_val = _fee_from_amount_text(consensus_text)
+                tok = _fee_status_capture(consensus_text)
+                if tok:
+                    fee_val = _normalize_fee_token(tok) or fee_val
+            if fee_val and fee_val != "unknown":
+                _merge_hits(
+                    merged,
+                    {
+                        "fee_status": FieldHit(
+                            value=fee_val,
+                            source="ocr_fee_receipt",
+                            page=pe.page_index,
+                            confidence=0.55,
+                        )
+                    },
+                    conflicts,
+                )
+                docs_present.add("fee_receipt")
                 break
 
     # After all pages merged: scan joined trusted_text for fee cues
@@ -1113,7 +1677,7 @@ def extract_packet(pdf_path: Path, case_id: str | None = None) -> PacketExtract:
                     },
                     conflicts,
                 )
-        # Manual fee correction anywhere in packet
+        # Manual / authoritative fee correction anywhere in packet
         fee_m = MANUAL_FEE_RE.search(all_text)
         if fee_m:
             _merge_hits(
@@ -1128,21 +1692,39 @@ def extract_packet(pdf_path: Path, case_id: str | None = None) -> PacketExtract:
                 },
                 conflicts,
             )
+        auth = AUTHORITATIVE_FEE_RE.search(all_text)
+        if auth and (
+            "fee_status" not in merged or merged["fee_status"].value == "unknown"
+        ):
+            tok = next(g for g in auth.groups() if g)
+            _merge_hits(
+                merged,
+                {
+                    "fee_status": FieldHit(
+                        value=tok.lower(),
+                        source="adjudicator_note",
+                        page=0,
+                        confidence=0.95,
+                    )
+                },
+                conflicts,
+            )
 
     if OBSERVED_FLAGS_NONE_RE.search(all_text):
         biometric_flags_observed = True
     if merged.get("observed_flags"):
         biometric_flags_observed = True
 
-    # Embargo worlds are denied in adjudication; only attach the risk_flags
-    # token when visible evidence mentions embargo (avoids extraction FPs).
+    # Embargo worlds: attach planetary_embargo for extraction+deny parity
+    # (goleffect/strobl serialization prior — identity-free world feature).
     reg = merged.get("registry_status")
     if reg and re.search(r"(?i)embargo", reg.value):
         risk_flags.add("planetary_embargo")
     home = merged.get("home_world")
-    if home and home.value in {"TRAPPIST-1e", "Eris Relay"}:
-        if re.search(r"(?i)embargo", all_text):
-            risk_flags.add("planetary_embargo")
+    if home and home.value in ALWAYS_EMBARGO_WORLDS:
+        risk_flags.add("planetary_embargo")
+    if home and home.value in {"Wolf-1061c"} and re.search(r"(?i)embargo", all_text):
+        risk_flags.add("planetary_embargo")
 
     # Observed flags field
     obs = merged.get("observed_flags")

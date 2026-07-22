@@ -91,7 +91,8 @@ ALWAYS_EMBARGO_WORLDS = {"TRAPPIST-1e", "Eris Relay"}
 NONDIP_EMBARGO_WORLDS = {"Wolf-1061c"}
 
 # Challenge epoch used when packet receipt date is not printed.
-DEFAULT_RECEIPT_DATE = date(2026, 7, 1)
+# Public packets belong to the versioned 2026-07-07 challenge snapshot.
+DEFAULT_RECEIPT_DATE = date(2026, 7, 7)
 
 # Span trust filters (reject white / decoy prompt-injection text).
 MAX_TRUSTED_COLOR = 16_700_000
