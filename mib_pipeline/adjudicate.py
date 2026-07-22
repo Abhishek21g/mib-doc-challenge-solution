@@ -12,6 +12,24 @@ from .constants import (
 )
 from .extract import PacketExtract
 
+# Empirical P(correct | decision bucket) from public train — identity-free features only.
+# Clipped away from {0,1} for stability off the training distribution.
+_CONF = {
+    "D|disq": 0.97,
+    "D|transit": 0.96,
+    "D|unpaid": 0.93,
+    "D|revoked": 0.97,
+    "D|other": 0.95,
+    "R|fee": 0.57,
+    "R|flag": 0.95,
+    "R|core": 0.41,
+    "R|other": 0.58,
+    "A|feeunk": 0.97,
+    "A|flags": 0.90,
+    "A|clean": 0.71,
+    "A|ocr": 0.65,
+}
+
 
 def _parse_date(value: str | None) -> date | None:
     if not value or value == "UNREADABLE":
@@ -27,6 +45,45 @@ def field_value(packet: PacketExtract, key: str, default: str = "unknown") -> st
     if not hit:
         return default
     return hit.value
+
+
+def _bucket(decision: str, reason: str, packet: PacketExtract) -> str:
+    fee = field_value(packet, "fee_status", "unknown")
+    visa = field_value(packet, "visa_class", "unknown")
+    sponsor = field_value(packet, "sponsor_id", "SPN-0000")
+    flags = set(packet.risk_flags)
+    if decision == "DENIED":
+        if reason.startswith("disq_flag") or reason.startswith("embargo") or reason == "wolf_nondip":
+            return "D|disq"
+        if reason == "transit7":
+            return "D|transit"
+        if reason == "unpaid":
+            return "D|unpaid"
+        if reason.startswith("revoked"):
+            return "D|revoked"
+        return "D|other"
+    if decision == "NEEDS_REVIEW":
+        if reason == "fee_unknown" or fee == "unknown":
+            return "R|fee"
+        if reason.startswith("review_flag") or (flags & REVIEW_FLAGS):
+            return "R|flag"
+        if reason in {"arrival_bad", "visa_missing", "visa_unknown", "fee_missing", "identity_gap"}:
+            return "R|core"
+        return "R|other"
+    # APPROVED
+    if reason == "manual_finding" and fee == "unknown":
+        return "A|feeunk"
+    if flags:
+        return "A|flags"
+    if packet.used_ocr and (
+        packet.trusted_span_count < 20 or not packet.biometric_flags_observed
+    ):
+        return "A|ocr"
+    return "A|clean"
+
+
+def _confidence_for(decision: str, reason: str, packet: PacketExtract) -> float:
+    return _CONF[_bucket(decision, reason, packet)]
 
 
 def build_record(packet: PacketExtract) -> dict[str, str | float]:
@@ -74,75 +131,86 @@ def adjudicate(packet: PacketExtract) -> tuple[str, float, str]:
     flags = set(packet.risk_flags)
     issues = set(packet.evidence_issues)
 
-    # 1. Manual finding dominates when present
-    if packet.manual_finding:
-        conf = 0.93 if packet.fields.get("manual_finding", None) and packet.fields["manual_finding"].confidence >= 0.95 else 0.82
-        return packet.manual_finding, conf, "manual_finding"
+    def finish(decision: str, reason: str) -> tuple[str, float, str]:
+        return decision, _confidence_for(decision, reason, packet), reason
 
-    # 2. Disqualifying flags
+    if packet.manual_finding:
+        return finish(packet.manual_finding, "manual_finding")
+
     hit = flags & DISQUALIFYING_FLAGS
     if hit:
-        return "DENIED", 0.95, f"disq_flag:{sorted(hit)[0]}"
+        return finish("DENIED", f"disq_flag:{sorted(hit)[0]}")
 
-    # 3. Always-embargo worlds
     if home in ALWAYS_EMBARGO_WORLDS:
-        return "DENIED", 0.94, f"embargo_world:{home}"
+        return finish("DENIED", f"embargo_world:{home}")
 
-    # 4. Wolf-1061c non-DIP
     if home in NONDIP_EMBARGO_WORLDS and visa != "DIP-1":
-        return "DENIED", 0.93, "wolf_nondip"
+        return finish("DENIED", "wolf_nondip")
 
-    # 5. TRANSIT-7
     if visa == "TRANSIT-7":
-        return "DENIED", 0.96, "transit7"
+        return finish("DENIED", "transit7")
 
-    # 6. Revoked sponsor (DIP exempt)
     if sponsor in REVOKED_SPONSORS and visa != "DIP-1":
-        return "DENIED", 0.94, f"revoked:{sponsor}"
+        return finish("DENIED", f"revoked:{sponsor}")
 
-    # 7. Unpaid fee
     if fee == "unpaid":
-        return "DENIED", 0.95, "unpaid"
+        return finish("DENIED", "unpaid")
 
-    # 8. Stale arrival (non-DIP)
     if visa != "DIP-1" and arrival is not None:
         if (DEFAULT_RECEIPT_DATE - arrival).days > 180:
-            return "DENIED", 0.9, "stale_arrival"
+            return finish("DENIED", "stale_arrival")
 
-    # 9. Unknown fee
     if fee == "unknown":
-        return "NEEDS_REVIEW", 0.8, "fee_unknown"
+        return finish("NEEDS_REVIEW", "fee_unknown")
 
-    # 10. Review-only flags
     rev = flags & REVIEW_FLAGS
     if rev:
-        return "NEEDS_REVIEW", 0.85, f"review_flag:{sorted(rev)[0]}"
+        return finish("NEEDS_REVIEW", f"review_flag:{sorted(rev)[0]}")
 
-    # 11. Evidence quality gates
     if "arrival_unreadable" in issues or "arrival_missing" in issues:
-        return "NEEDS_REVIEW", 0.72, "arrival_bad"
+        return finish("NEEDS_REVIEW", "arrival_bad")
     if "name_cut_out" in issues or "name_missing" in issues:
-        return "NEEDS_REVIEW", 0.7, "identity_gap"
+        return finish("NEEDS_REVIEW", "identity_gap")
     if "sponsor_conflict" in issues:
-        return "NEEDS_REVIEW", 0.75, "sponsor_conflict"
+        return finish("NEEDS_REVIEW", "sponsor_conflict")
     if "visa_missing" in issues:
-        return "NEEDS_REVIEW", 0.68, "visa_missing"
+        return finish("NEEDS_REVIEW", "visa_missing")
     if "fee_missing" in issues:
-        return "NEEDS_REVIEW", 0.68, "fee_missing"
+        return finish("NEEDS_REVIEW", "fee_missing")
     if "image_heavy_uncertain" in issues and (
         "visa_missing" in issues or "fee_missing" in issues or "name_missing" in issues
     ):
-        return "NEEDS_REVIEW", 0.55, "uncertain_ocr"
+        return finish("NEEDS_REVIEW", "uncertain_ocr")
     if visa == "unknown":
-        return "NEEDS_REVIEW", 0.6, "visa_unknown"
+        return finish("NEEDS_REVIEW", "visa_unknown")
     if home == "unknown" and "name_missing" in issues:
-        return "NEEDS_REVIEW", 0.6, "core_fields_unknown"
+        return finish("NEEDS_REVIEW", "core_fields_unknown")
 
-    # Missing sponsor id on non-DIP with otherwise complete packet → review
     if visa != "DIP-1" and sponsor in {"SPN-0000", "unknown"} and "sponsor_conflict" not in issues:
-        # Only force review when sponsor truly absent from form evidence
         if "sponsor_id" not in {c.split(":")[0] for c in packet.conflicts}:
             if not packet.fields.get("sponsor_id"):
-                return "NEEDS_REVIEW", 0.65, "sponsor_missing"
+                return finish("NEEDS_REVIEW", "sponsor_missing")
 
-    return "APPROVED", 0.88, "clean"
+    intake_keys = ("species_code", "home_world", "arrival_date")
+    intake_trusted = all(
+        (hit := packet.fields.get(k)) is not None
+        and hit.source in {"intake", "adjudicator_note", "registry", "biometric"}
+        for k in intake_keys
+    )
+    attest_heavy = any(
+        (hit := packet.fields.get(k)) is not None and hit.source in {"sponsor_letter", "ocr"}
+        for k in ("visa_class", "sponsor_id")
+    )
+    # Only demote when attestation is the sole policy anchor *and* biometric
+    # risk panel was never observed (silent-stamp CFA pattern). Clean digital
+    # packets without B-13 still approve when fee/visa are solid.
+    if (
+        attest_heavy
+        and not intake_trusted
+        and packet.used_ocr
+        and not packet.biometric_flags_observed
+        and "biometric" not in packet.docs_present
+    ):
+        return finish("NEEDS_REVIEW", "attest_without_intake")
+
+    return finish("APPROVED", "clean")

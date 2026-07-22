@@ -21,6 +21,49 @@ VISA_CLASSES = {"XW-1", "XW-2", "DIP-1", "MED-3", "TRANSIT-7"}
 FEE_STATUSES = {"paid", "waived", "unpaid", "unknown"}
 ADJUDICATIONS = {"APPROVED", "DENIED", "NEEDS_REVIEW"}
 
+# Closed vocabularies from the public field manual / train distribution.
+KNOWN_PURPOSES = {
+    "reactor maintenance",
+    "field repair",
+    "medical consult",
+    "research",
+    "cultural exchange",
+    "translation",
+    "archive audit",
+    "xenobotany",
+    "diplomatic",
+    "transit",
+}
+KNOWN_SPECIES = {
+    "TRIANGULAN",
+    "JOVIAN_GASFORM",
+    "CENTAURI_SYNTH",
+    "LUNA_SECURID",
+    "KAIJU_MICRO",
+    "ORION_GRAYS",
+    "ALPHA_DRACONIAN",
+    "SIRIUS_AVIAN",
+    "VENUSIAN_MYCELIAL",
+    "AQUARIAN_MANTIS",
+    "ARCTURIAN",
+    "ANDROMEDAN",
+}
+KNOWN_WORLDS = {
+    "Luyten-b",
+    "Europa Station",
+    "Titan Freeport",
+    "Barnard-c",
+    "Gliese-581g",
+    "Mars Dome-7",
+    "Kepler-186f",
+    "Sirius Outpost",
+    "Wolf-1061c",
+    "Proxima-b",
+    "Zeta Reticuli",
+    "TRAPPIST-1e",
+    "Eris Relay",
+}
+
 DISQUALIFYING_FLAGS = {
     "memory_tampering",
     "planetary_embargo",
@@ -90,4 +133,11 @@ SOURCE_RANK = {
     "fee_receipt": 5,
     "unknown": 6,
     "ocr": 7,
+    # OCR of a known form type — better than bare ocr, worse than native text.
+    "ocr_intake": 8,
+    "ocr_biometric": 8,
+    "ocr_sponsor_letter": 8,
+    "ocr_registry": 8,
+    "ocr_fee_receipt": 8,
+    "ocr_adjudicator_note": 8,
 }
