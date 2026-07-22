@@ -84,6 +84,68 @@ SCHEMA_FALLBACK = {
     "fee_status": "unknown",
 }
 
+# Identity-free empirical P(correct | stratum) from public train (Laplace-smoothed).
+# No case IDs. Used only to map decision×fee×visa×flags×completeness → confidence.
+_CONF_STRATA: dict[str, float] = {
+    "A|paid|DIP-1|none|ok": 0.736,
+    "A|paid|MED-3|none|ok": 0.694,
+    "A|paid|XW-2|none|ok": 0.683,
+    "A|paid|XW-1|none|ok": 0.706,
+    "A|paid|other|none|ok": 0.68,
+    "A|waived|DIP-1|none|ok": 0.76,
+    "A|waived|MED-3|none|ok": 0.50,
+    "A|waived|XW-1|none|ok": 0.588,
+    "A|waived|XW-2|none|ok": 0.60,
+    "A|waived|other|none|ok": 0.48,
+    "A|unknown|DIP-1|none|ok": 0.70,
+    "A|unknown|other|none|ok": 0.55,
+    "A|paid|DIP-1|flags|ok": 0.72,
+    "A|paid|other|flags|ok": 0.65,
+    "D|paid|MED-3|flags|ok": 0.966,
+    "D|paid|MED-3|none|ok": 0.955,
+    "D|paid|XW-1|none|ok": 0.944,
+    "D|paid|XW-1|flags|ok": 0.929,
+    "D|paid|XW-2|none|ok": 0.80,
+    "D|paid|TRANSIT-7|none|ok": 0.95,
+    "D|paid|other|flags|ok": 0.94,
+    "D|paid|other|none|ok": 0.92,
+    "D|unpaid|DIP-1|none|ok": 0.938,
+    "D|unpaid|XW-1|none|ok": 0.917,
+    "D|unpaid|other|none|ok": 0.93,
+    "D|unknown|MED-3|flags|ok": 0.962,
+    "D|unknown|TRANSIT-7|none|ok": 0.95,
+    "D|unknown|XW-1|flags|ok": 0.944,
+    "D|unknown|XW-1|none|ok": 0.867,
+    "D|unknown|XW-2|none|ok": 0.923,
+    "D|unknown|MED-3|none|ok": 0.786,
+    "D|unknown|other|none|weak": 0.526,
+    "D|unknown|other|none|ok": 0.85,
+    "D|waived|MED-3|flags|ok": 0.933,
+    "D|waived|other|flags|ok": 0.92,
+    "N|unknown|DIP-1|none|ok": 0.455,
+    "N|unknown|XW-2|none|ok": 0.543,
+    "N|unknown|XW-1|none|ok": 0.559,
+    "N|unknown|MED-3|none|ok": 0.48,
+    "N|unknown|DIP-1|flags|ok": 0.933,
+    "N|unknown|XW-1|flags|ok": 0.933,
+    "N|unknown|XW-2|flags|ok": 0.909,
+    "N|unknown|MED-3|flags|ok": 0.80,
+    "N|unknown|other|none|weak": 0.60,
+    "N|unknown|other|none|ok": 0.55,
+    "N|paid|XW-1|flags|ok": 0.867,
+    "N|paid|MED-3|flags|ok": 0.833,
+    "N|paid|XW-2|flags|ok": 0.909,
+    "N|paid|other|flags|ok": 0.85,
+    "N|waived|MED-3|flags|ok": 0.909,
+    "N|waived|other|flags|ok": 0.85,
+}
+
+_CONF_FALLBACK = {
+    "A": 0.70,
+    "D": 0.94,
+    "N": 0.62,
+}
+
 
 def _run_text(command: list[str], *, timeout: int = 30) -> str:
     try:
@@ -333,12 +395,21 @@ def extract_candidates(
                     r"Amount\s*\$?0\.00", page, re.I
                 ):
                     result["fee_status"].append((base - 4, "waived", f"{source}:fee"))
-                if re.search(r"Amount\s*\$?\s*809[.,]?00?", page, re.I):
+                # Exclude FORM I-8090 false positives: require Amount/$ context.
+                fee_page = re.sub(r"(?i)FORM\s*I-?8090", "", page)
+                if re.search(
+                    r"(?i)(?:Amount\s*[:$]?\s*\$?\s*809(?:[.,]00)?\b|\$\s*809(?:\.00)?\b)",
+                    fee_page,
+                ):
                     result["fee_status"].append((92, "paid", f"{source}:fee"))
-                elif re.search(r"Amount\s*\$?\s*0[.,]00", page, re.I) and re.search(
+                elif re.search(r"Amount\s*\$?\s*0[.,]00", fee_page, re.I) and re.search(
                     r"DIP.?WAIVER", page, re.I
                 ):
                     result["fee_status"].append((92, "waived", f"{source}:fee"))
+                elif re.search(r"(?i)\bAmount\b", fee_page) and re.search(
+                    r"(?i)\$\s*809(?:\.00)?\b", fee_page
+                ):
+                    result["fee_status"].append((93, "paid", f"{source}:fee"))
                 for match in re.finditer(
                     r"Fee\s+St\w*\s*[: ]\s*([^\n]{2,24})", page, re.I
                 ):
@@ -411,7 +482,11 @@ def extract_candidates(
                         (global_priority, value, "ocr:unknown")
                     )
             # Amount $809 anywhere on OCR pages (not FORM I-8090).
-            if re.search(r"(?i)\$\s*809(?:\.00)?\b|Amount\s*\$?\s*809", page):
+            fee_page = re.sub(r"(?i)FORM\s*I-?8090", "", page)
+            if re.search(
+                r"(?i)(?:Amount\s*[:$]?\s*\$?\s*809(?:[.,]00)?\b|\$\s*809(?:\.00)?\b)",
+                fee_page,
+            ):
                 result["fee_status"].append((88, "paid", "ocr:fee"))
 
         if kind == "manual":
@@ -729,8 +804,61 @@ def ocr_pdf_high_resolution(pdf: Path, work_dir: Path) -> str:
     return text
 
 
+def _flags_panel_observed(text: str) -> bool:
+    return bool(re.search(r"(?i)Observed\s+flags?\s*:", text))
+
+
+def _core_weak(record: dict[str, str]) -> bool:
+    misses = 0
+    if record.get("applicant_name") in {"unknown", ""}:
+        misses += 1
+    if record.get("species_code") == "unknown":
+        misses += 1
+    if record.get("home_world") == "unknown":
+        misses += 1
+    if record.get("sponsor_id") in {"SPN-0000", "unknown", ""}:
+        misses += 1
+    if record.get("arrival_date") in {"1900-01-01", "UNREADABLE", ""}:
+        misses += 1
+    if record.get("declared_purpose") == "unknown":
+        misses += 1
+    return misses >= 2
+
+
+def confidence_for(record: dict[str, str], *, explicit_quality: int = 0) -> float:
+    if explicit_quality >= 100:
+        return 0.995
+    adj = record["adjudication"]
+    letter = {"APPROVED": "A", "DENIED": "D", "NEEDS_REVIEW": "N"}[adj]
+    fee = record["fee_status"] if record["fee_status"] in FEE_STATUSES else "unknown"
+    visa = (
+        record["visa_class"]
+        if record["visa_class"] in {"XW-1", "XW-2", "DIP-1", "MED-3", "TRANSIT-7"}
+        else "other"
+    )
+    rf = "flags" if record["risk_flags"] not in {"none", ""} else "none"
+    weak = "weak" if _core_weak(record) else "ok"
+    key = f"{letter}|{fee}|{visa}|{rf}|{weak}"
+    if key in _CONF_STRATA:
+        return _CONF_STRATA[key]
+    # Soft fallbacks: try without weak, then without visa, then decision prior.
+    for alt in (
+        f"{letter}|{fee}|{visa}|{rf}|ok",
+        f"{letter}|{fee}|other|{rf}|ok",
+        f"{letter}|{fee}|other|none|ok",
+        f"{letter}|unknown|other|{rf}|ok",
+    ):
+        if alt in _CONF_STRATA:
+            return _CONF_STRATA[alt]
+    return _CONF_FALLBACK[letter]
+
+
 def adjudicate_record(
-    record: dict[str, str], explicit: str = "", unreadable: bool = False
+    record: dict[str, str],
+    explicit: str = "",
+    unreadable: bool = False,
+    *,
+    flags_observed: bool = False,
 ) -> str:
     if explicit in ADJUDICATIONS:
         return explicit
@@ -756,7 +884,103 @@ def adjudicate_record(
         unreadable = True
     if unreadable or flags & REVIEW_FLAGS or record["fee_status"] == "unknown":
         return "NEEDS_REVIEW"
+    # Optional strict visible-risk bar (strobl-style). Default off: full demotion
+    # of unobserved-panel approvals nets ~-4 pts on public train (hurts true AP
+    # more than it saves CFA). Enable with MIB_STRICT_FLAGS=1 for CFA-first runs.
+    strict = os.environ.get("MIB_STRICT_FLAGS", "").strip() in {"1", "true", "yes"}
+    if (
+        strict
+        and not flags_observed
+        and record["risk_flags"] in {"none", ""}
+    ):
+        return "NEEDS_REVIEW"
     return "APPROVED"
+
+
+def _try_review_recovery(
+    record: dict[str, str],
+    *,
+    flags_observed: bool,
+    damage: bool,
+    native_len: int,
+) -> bool:
+    """Re-promote clean NEEDS_REVIEW → APPROVED when flags panel was visible."""
+    if record["adjudication"] != "NEEDS_REVIEW":
+        return False
+    if record["fee_status"] not in {"paid", "waived"}:
+        return False
+    if record["fee_status"] == "waived" and record["visa_class"] != "DIP-1":
+        return False
+    if record["visa_class"] not in {"XW-1", "XW-2", "MED-3", "DIP-1"}:
+        return False
+    if record["risk_flags"] not in {"none", ""}:
+        return False
+    if not flags_observed:
+        return False
+    if _core_weak(record):
+        return False
+    if damage and native_len < 250:
+        return False
+    return True
+
+
+def _rapid_fill(pdf: Path, record: dict[str, str], ocr_text: str) -> str:
+    """Fail-closed RapidOCR for still-unknown fee / missing flags panel."""
+    need_fee = record.get("fee_status") == "unknown"
+    need_flags = not _flags_panel_observed(ocr_text) and record.get("risk_flags") in {
+        "none",
+        "",
+    }
+    if not need_fee and not need_flags:
+        return ""
+    if os.environ.get("MIB_NO_RAPID", "").strip() in {"1", "true", "yes"}:
+        return ""
+    try:
+        from .rapid_ocr import ocr_page_fee_band, ocr_page_text, rapid_available
+    except Exception:
+        return ""
+    if not rapid_available():
+        return ""
+    try:
+        import fitz
+    except Exception:
+        return ""
+    chunks: list[str] = []
+    try:
+        doc = fitz.open(pdf)
+    except Exception:
+        return ""
+    try:
+        for page in doc:
+            native = page.get_text() or ""
+            upper = native.upper()
+            imgs = page.get_images()
+            fee_like = (
+                "FEE RECEIPT" in upper
+                or ("AMOUNT" in upper and "WAIVER" in upper)
+                or (need_fee and imgs and len(native) < 120)
+            )
+            bio_like = (
+                "BIOMETRIC" in upper
+                or "OBSERVED FLAGS" in upper
+                or (need_flags and imgs and len(native) < 120)
+            )
+            if need_fee and fee_like:
+                text = ocr_page_fee_band(page, dpi=180) or ocr_page_text(page, dpi=160)
+                if text.strip():
+                    chunks.append(text)
+            elif need_flags and bio_like:
+                text = ocr_page_text(page, dpi=160)
+                if text.strip():
+                    chunks.append(text)
+            elif need_fee and imgs and len(native) < 80:
+                # Full-page scan with almost no native text — try fee band.
+                text = ocr_page_fee_band(page, dpi=160)
+                if text.strip():
+                    chunks.append(text)
+    finally:
+        doc.close()
+    return "\f".join(chunks)
 
 
 def parse_pdf(pdf: Path, use_ocr: bool = True, *, high_resolution_done: bool = False) -> dict[str, object]:
@@ -789,10 +1013,13 @@ def parse_pdf(pdf: Path, use_ocr: bool = True, *, high_resolution_done: bool = F
 
     flag_values = candidates.get("risk_flags", [])
     found_flags: set[str] = set()
+    flags_observed = _flags_panel_observed(native_clean + "\n" + ocr)
     if flag_values:
         for priority, value, _ in flag_values:
             if priority >= 40 and value != "none":
                 found_flags.update(value.split("|"))
+            if value == "none" and priority >= 40:
+                flags_observed = True
     record["risk_flags"] = "|".join(sorted(found_flags)) or "none"
 
     if record["home_world"] in ALWAYS_EMBARGO_WORLDS:
@@ -800,13 +1027,45 @@ def parse_pdf(pdf: Path, use_ocr: bool = True, *, high_resolution_done: bool = F
         world_flags.add("planetary_embargo")
         record["risk_flags"] = "|".join(sorted(world_flags))
 
+    # Dual-OCR recovery for remaining UNKNOWN fee / missing flags panel.
+    if use_ocr and (
+        record["fee_status"] == "unknown"
+        or (not flags_observed and record["risk_flags"] in {"none", ""})
+    ):
+        rapid_text = _rapid_fill(pdf, record, native_clean + "\n" + ocr)
+        if compact(rapid_text):
+            ocr = ocr + "\f" + rapid_text
+            candidates = merge_candidates(
+                candidates, extract_candidates(rapid_text, "ocr")
+            )
+            for field in SCHEMA_FALLBACK:
+                value, quality, conflict = choose_field(
+                    field, candidates.get(field, [])
+                )
+                record[field] = value or SCHEMA_FALLBACK[field]
+                qualities.append(quality)
+                conflicts += int(conflict)
+            flag_values = candidates.get("risk_flags", [])
+            found_flags = set()
+            if flag_values:
+                for priority, value, _ in flag_values:
+                    if priority >= 40 and value != "none":
+                        found_flags.update(value.split("|"))
+                    if value == "none" and priority >= 40:
+                        flags_observed = True
+            if found_flags:
+                record["risk_flags"] = "|".join(sorted(found_flags))
+            flags_observed = flags_observed or _flags_panel_observed(rapid_text)
+
     explicit, explicit_quality, explicit_conflict = choose(
         candidates.get("adjudication", [])
     )
     unreadable = bool(
         re.search(r"Arrival\s+Date\s*[: ]\s*UNREADABLE", native + "\n" + ocr, re.I)
     )
-    record["adjudication"] = adjudicate_record(record, explicit, unreadable)
+    record["adjudication"] = adjudicate_record(
+        record, explicit, unreadable, flags_observed=flags_observed
+    )
 
     damage = bool(
         re.search(
@@ -824,43 +1083,36 @@ def parse_pdf(pdf: Path, use_ocr: bool = True, *, high_resolution_done: bool = F
         re.search(r"WHITEOUT|WASHED OUT|PANEL MISSING", native + "\n" + ocr, re.I)
     )
     weak_review = damaged_approval and (len(native) < 250 or severe_damage)
-    recovered_approval = damaged_approval and not weak_review
     if weak_review:
         record["adjudication"] = "NEEDS_REVIEW"
 
-    min_quality = min(qualities) if qualities else 0
-    if explicit_quality >= 100 and not explicit_conflict:
-        confidence = 0.995
-    elif weak_review:
-        confidence = 0.42
-    elif recovered_approval:
-        confidence = 0.70
-    elif record["adjudication"] == "DENIED":
-        confidence = 0.98
-    elif record["adjudication"] == "NEEDS_REVIEW":
-        confidence = 0.95 if unreadable or min_quality < 20 else 0.72
-    elif flag_values:
-        confidence = 0.85
-    else:
-        confidence = 0.59
-    if conflicts:
-        confidence = max(0.35, confidence - 0.08)
-    record["confidence"] = round(confidence, 3)
+    if _try_review_recovery(
+        record,
+        flags_observed=flags_observed,
+        damage=damage,
+        native_len=len(native),
+    ):
+        record["adjudication"] = "APPROVED"
+
+    confidence = confidence_for(record, explicit_quality=explicit_quality)
+    if explicit_conflict or conflicts:
+        confidence = max(0.35, confidence - 0.06)
+    if record["adjudication"] == "APPROVED" and not flags_observed:
+        # Should be rare after the bar; keep confidence humble if it happens.
+        confidence = min(confidence, 0.55)
+    record["confidence"] = round(float(confidence), 3)
 
     if (
         use_ocr
         and not high_resolution_done
         and "REDACTED" in ocr.upper()
         and record["risk_flags"] == "none"
-        and confidence < 0.90
+        and record["confidence"] < 0.90
     ):
         with tempfile.TemporaryDirectory(prefix="mib-hires-") as tmp:
             high_resolution_ocr = ocr_pdf_high_resolution(pdf, Path(tmp))
         if compact(high_resolution_ocr):
-            # Re-parse with hi-res OCR prepended.
-            with tempfile.TemporaryDirectory(prefix="mib-ocr2-") as tmp2:
-                # Stash combined OCR via env cache bypass: call extract on concat.
-                combined = high_resolution_ocr + "\f" + ocr
+            combined = high_resolution_ocr + "\f" + ocr
             native_candidates = extract_candidates(native_clean, "native")
             candidates = merge_candidates(
                 native_candidates, extract_candidates(combined, "ocr")
@@ -872,10 +1124,13 @@ def parse_pdf(pdf: Path, use_ocr: bool = True, *, high_resolution_done: bool = F
                 record[field] = value or SCHEMA_FALLBACK[field]
             flag_values = candidates.get("risk_flags", [])
             found_flags = set()
+            flags_observed = _flags_panel_observed(combined)
             if flag_values:
                 for priority, value, _ in flag_values:
                     if priority >= 40 and value != "none":
                         found_flags.update(value.split("|"))
+                    if value == "none" and priority >= 40:
+                        flags_observed = True
             record["risk_flags"] = "|".join(sorted(found_flags)) or "none"
             if record["home_world"] in ALWAYS_EMBARGO_WORLDS:
                 world_flags = set(record["risk_flags"].split("|")) - {"none", ""}
@@ -885,14 +1140,18 @@ def parse_pdf(pdf: Path, use_ocr: bool = True, *, high_resolution_done: bool = F
                 candidates.get("adjudication", [])
             )
             record["adjudication"] = adjudicate_record(
-                record, explicit, unreadable
+                record, explicit, unreadable, flags_observed=flags_observed
             )
-            if record["adjudication"] == "DENIED":
-                record["confidence"] = 0.98
-            elif record["adjudication"] == "NEEDS_REVIEW":
-                record["confidence"] = 0.80
-            else:
-                record["confidence"] = 0.75
+            if _try_review_recovery(
+                record,
+                flags_observed=flags_observed,
+                damage=True,
+                native_len=len(native),
+            ):
+                record["adjudication"] = "APPROVED"
+            record["confidence"] = round(
+                confidence_for(record, explicit_quality=explicit_quality), 3
+            )
 
     return record
 
