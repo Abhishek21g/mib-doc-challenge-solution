@@ -1,16 +1,17 @@
-__pycache__/
+.git
+.github
+.env
+.env.*
+.DS_Store
 **/__pycache__/
+*.py[cod]
 .pytest_cache/
 .ruff_cache/
 .venv/
-*.pyc
-.DS_Store
 tmp/
 output/
-.env
-
-# Bulk challenge data is distributed as a versioned zip.
 data/train/
 data/validation/
+submissions/
 *.zip
 *.zip.sha256

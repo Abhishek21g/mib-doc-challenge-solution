@@ -1,11 +1,9 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 
-input_dir="${1:?usage: run.sh <input_pdf_dir> <output_path>}"
-output_path="${2:?usage: run.sh <input_pdf_dir> <output_path>}"
+if [ "$#" -ne 2 ]; then
+  echo "usage: run.sh <input_pdf_dir> <output_predictions_path>" >&2
+  exit 64
+fi
 
-export PYTHONUNBUFFERED=1
-export OMP_NUM_THREADS=1
-export TESSDATA_PREFIX="${TESSDATA_PREFIX:-/usr/share/tesseract-ocr/5/tessdata}"
-
-python3 /app/solution.py "$input_dir" "$output_path"
+exec python3 -I -B /app/solution.py "$1" "$2"

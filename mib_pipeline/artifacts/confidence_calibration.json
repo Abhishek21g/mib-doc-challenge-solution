@@ -1,0 +1,1063 @@
+{
+  "artifact_id": "semantic-trace-calibration-v2-tuning700",
+  "fit_metadata": {
+    "cross_validation": {
+      "candidate_bucket_strengths": [
+        2,
+        4,
+        8,
+        12,
+        16,
+        24,
+        32,
+        50
+      ],
+      "candidate_signature_strengths": [
+        2,
+        4,
+        8,
+        12,
+        16,
+        24,
+        32,
+        50,
+        80
+      ],
+      "decision_to_global_strength": 8,
+      "fold_count": 5,
+      "mean_brier": 0.0942163962467925,
+      "method": "five_fold_deterministic_sha256_partition",
+      "selected_bucket_strength": 2,
+      "selected_signature_strength": 2,
+      "selection_metric": "mean_brier"
+    },
+    "fit_split": "public-tuning700-current-policy",
+    "fit_split_role": "tuning",
+    "method": "hierarchical_empirical_bayes_semantic_trace",
+    "positive_target_count": 494,
+    "target": "emitted_adjudication_is_correct",
+    "training_case_count": 698
+  },
+  "model": {
+    "decision_statistics": {
+      "APPROVED": [
+        62,
+        63
+      ],
+      "DENIED": [
+        241,
+        245
+      ],
+      "NEEDS_REVIEW": [
+        191,
+        390
+      ]
+    },
+    "global_statistics": [
+      494,
+      698
+    ],
+    "primary_bucket_statistics": {
+      "APPROVED|authoritative": [
+        39,
+        39
+      ],
+      "APPROVED|support=3": [
+        19,
+        20
+      ],
+      "APPROVED|support=4": [
+        4,
+        4
+      ],
+      "DENIED|authoritative": [
+        87,
+        87
+      ],
+      "DENIED|reason=barred_sponsor": [
+        37,
+        39
+      ],
+      "DENIED|reason=disqualifying_flag": [
+        42,
+        42
+      ],
+      "DENIED|reason=embargoed_home_world": [
+        19,
+        19
+      ],
+      "DENIED|reason=stale_application": [
+        15,
+        15
+      ],
+      "DENIED|reason=transit_work_authorization": [
+        23,
+        25
+      ],
+      "DENIED|reason=unpaid_without_valid_waiver": [
+        18,
+        18
+      ],
+      "NEEDS_REVIEW|authoritative": [
+        51,
+        51
+      ],
+      "NEEDS_REVIEW|class=conflict": [
+        2,
+        2
+      ],
+      "NEEDS_REVIEW|class=core_gap": [
+        88,
+        276
+      ],
+      "NEEDS_REVIEW|class=policy_only": [
+        2,
+        10
+      ],
+      "NEEDS_REVIEW|class=review_flag": [
+        48,
+        51
+      ]
+    },
+    "probability_clip": [
+      0.02,
+      0.98
+    ],
+    "smoothing_strengths": {
+      "bucket_to_decision": 2,
+      "decision_to_global": 8,
+      "signature_to_bucket": 2
+    },
+    "trace_signature_statistics": {
+      "APPROVED|source=authoritative|denial=|review=|approval=authoritative_visible_decision": [
+        39,
+        39
+      ],
+      "APPROVED|source=rules|denial=|review=|approval=application_date_current_or_exempt,diplomatic_sponsor_exemption,fee_paid,strict_approval_bar_cleared": [
+        9,
+        9
+      ],
+      "APPROVED|source=rules|denial=|review=|approval=application_date_current_or_exempt,diplomatic_sponsor_exemption,strict_approval_bar_cleared,valid_fee_waiver": [
+        4,
+        4
+      ],
+      "APPROVED|source=rules|denial=|review=|approval=application_date_current_or_exempt,fee_paid,no_visible_biohazard_risk,sponsor_present_and_not_publicly_barred,strict_approval_bar_cleared": [
+        4,
+        4
+      ],
+      "APPROVED|source=rules|denial=|review=|approval=application_date_current_or_exempt,fee_paid,sponsor_present_and_not_publicly_barred,strict_approval_bar_cleared": [
+        6,
+        7
+      ],
+      "DENIED|source=authoritative|denial=authoritative_visible_decision|review=|approval=": [
+        87,
+        87
+      ],
+      "DENIED|source=rules|denial=barred_sponsor:*,embargoed_home_world:*|review=fee_status_unknown,required_output_unknown:fee_status,required_output_unknown:risk_flags,risk_flags_unknown|approval=application_date_current_or_exempt": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=barred_sponsor:*,stale_application|review=fee_status_unknown,required_output_unknown:fee_status|approval=": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=barred_sponsor:*,stale_application|review=|approval=fee_paid": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=barred_sponsor:*|review=arrival_date_unknown,fee_status_unknown,required_output_unknown:arrival_date,required_output_unknown:fee_status,required_output_unknown:home_world,required_output_unknown:risk_flags,required_output_unknown:species_code,risk_flags_unknown|approval=": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=barred_sponsor:*|review=arrival_date_unknown,required_output_unknown:arrival_date,review_flag:illegible_biometrics,unsupported_fee_waiver|approval=": [
+        0,
+        1
+      ],
+      "DENIED|source=rules|denial=barred_sponsor:*|review=clean_biohazard_check_missing,fee_status_unknown,required_output_unknown:fee_status,required_output_unknown:risk_flags,risk_flags_unknown|approval=application_date_current_or_exempt": [
+        3,
+        3
+      ],
+      "DENIED|source=rules|denial=barred_sponsor:*|review=clean_biohazard_check_missing,required_output_unknown:risk_flags,risk_flags_unknown|approval=application_date_current_or_exempt,fee_paid": [
+        5,
+        5
+      ],
+      "DENIED|source=rules|denial=barred_sponsor:*|review=clean_biohazard_check_missing,review_flag:illegible_biometrics|approval=application_date_current_or_exempt,fee_paid": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=barred_sponsor:*|review=fee_status_unknown,required_output_unknown:fee_status,required_output_unknown:risk_flags,risk_flags_unknown,unresolved_linkage:*|approval=application_date_current_or_exempt": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=barred_sponsor:*|review=fee_status_unknown,required_output_unknown:fee_status,required_output_unknown:risk_flags,risk_flags_unknown|approval=application_date_current_or_exempt": [
+        3,
+        4
+      ],
+      "DENIED|source=rules|denial=barred_sponsor:*|review=fee_status_unknown,required_output_unknown:fee_status,review_flag:illegible_biometrics|approval=application_date_current_or_exempt": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=barred_sponsor:*|review=fee_status_unknown,required_output_unknown:fee_status|approval=application_date_current_or_exempt": [
+        2,
+        2
+      ],
+      "DENIED|source=rules|denial=barred_sponsor:*|review=required_output_unknown:risk_flags,risk_flags_unknown,unsupported_fee_waiver|approval=application_date_current_or_exempt": [
+        2,
+        2
+      ],
+      "DENIED|source=rules|denial=barred_sponsor:*|review=required_output_unknown:risk_flags,risk_flags_unknown|approval=application_date_current_or_exempt,fee_paid": [
+        8,
+        8
+      ],
+      "DENIED|source=rules|denial=barred_sponsor:*|review=review_flag:illegible_biometrics,unsupported_fee_waiver|approval=application_date_current_or_exempt": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=barred_sponsor:*|review=unsupported_fee_waiver|approval=application_date_current_or_exempt": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=barred_sponsor:*|review=unsupported_fee_waiver|approval=application_date_current_or_exempt,no_visible_biohazard_risk": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=barred_sponsor:*|review=|approval=application_date_current_or_exempt,fee_paid": [
+        2,
+        2
+      ],
+      "DENIED|source=rules|denial=barred_sponsor:*|review=|approval=application_date_current_or_exempt,fee_paid,no_visible_biohazard_risk": [
+        2,
+        2
+      ],
+      "DENIED|source=rules|denial=disqualifying_flag:active_warrant|review=clean_biohazard_check_missing|approval=application_date_current_or_exempt,fee_paid,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=disqualifying_flag:active_warrant|review=review_flag:illegible_biometrics|approval=application_date_current_or_exempt,fee_paid,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=disqualifying_flag:biohazard_red|review=clean_biohazard_check_missing,fee_status_unknown,required_output_unknown:applicant_name,required_output_unknown:fee_status,required_output_unknown:home_world|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=disqualifying_flag:biohazard_red|review=clean_biohazard_check_missing,fee_status_unknown,required_output_unknown:fee_status|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        4,
+        4
+      ],
+      "DENIED|source=rules|denial=disqualifying_flag:biohazard_red|review=clean_biohazard_check_missing,unsupported_fee_waiver|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=disqualifying_flag:biohazard_red|review=clean_biohazard_check_missing|approval=application_date_current_or_exempt,fee_paid,sponsor_present_and_not_publicly_barred": [
+        7,
+        7
+      ],
+      "DENIED|source=rules|denial=disqualifying_flag:biohazard_red|review=fee_status_unknown,required_output_unknown:fee_status|approval=application_date_current_or_exempt,diplomatic_sponsor_exemption": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=disqualifying_flag:biohazard_red|review=fee_status_unknown,required_output_unknown:fee_status|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=disqualifying_flag:biohazard_red|review=unsupported_fee_waiver|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=disqualifying_flag:biohazard_red|review=|approval=application_date_current_or_exempt,fee_paid,sponsor_present_and_not_publicly_barred": [
+        2,
+        2
+      ],
+      "DENIED|source=rules|denial=disqualifying_flag:memory_tampering|review=clean_biohazard_check_missing,fee_status_unknown,required_output_unknown:fee_status,review_flag:illegible_biometrics|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        2,
+        2
+      ],
+      "DENIED|source=rules|denial=disqualifying_flag:memory_tampering|review=|approval=application_date_current_or_exempt,diplomatic_sponsor_exemption,fee_paid": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=disqualifying_flag:planetary_embargo,embargoed_home_world:*,transit_work_authorization|review=fee_status_unknown,required_output_unknown:fee_status|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=disqualifying_flag:planetary_embargo,embargoed_home_world:*|review=arrival_date_unknown,clean_biohazard_check_missing,fee_status_unknown,required_output_unknown:arrival_date,required_output_unknown:fee_status|approval=sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=disqualifying_flag:planetary_embargo,embargoed_home_world:*|review=clean_biohazard_check_missing,unsupported_fee_waiver|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=disqualifying_flag:planetary_embargo,embargoed_home_world:*|review=clean_biohazard_check_missing|approval=application_date_current_or_exempt,fee_paid,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=disqualifying_flag:planetary_embargo,embargoed_home_world:*|review=fee_status_unknown,required_output_unknown:declared_purpose,required_output_unknown:fee_status,required_output_unknown:sponsor_id,required_sponsor_unknown|approval=application_date_current_or_exempt": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=disqualifying_flag:planetary_embargo,embargoed_home_world:*|review=fee_status_unknown,required_output_unknown:fee_status|approval=application_date_current_or_exempt,diplomatic_sponsor_exemption": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=disqualifying_flag:planetary_embargo,embargoed_home_world:*|review=fee_status_unknown,required_output_unknown:fee_status|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        2,
+        2
+      ],
+      "DENIED|source=rules|denial=disqualifying_flag:planetary_embargo,embargoed_home_world:*|review=review_flag:illegible_biometrics|approval=application_date_current_or_exempt,diplomatic_sponsor_exemption,valid_fee_waiver": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=disqualifying_flag:planetary_embargo,embargoed_home_world:*|review=|approval=application_date_current_or_exempt,diplomatic_sponsor_exemption,fee_paid": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=disqualifying_flag:planetary_embargo,embargoed_home_world:*|review=|approval=application_date_current_or_exempt,fee_paid,sponsor_present_and_not_publicly_barred": [
+        3,
+        3
+      ],
+      "DENIED|source=rules|denial=disqualifying_flag:planetary_embargo|review=arrival_date_unknown,fee_status_unknown,required_output_unknown:applicant_name,required_output_unknown:arrival_date,required_output_unknown:declared_purpose,required_output_unknown:fee_status,required_output_unknown:home_world,required_output_unknown:sponsor_id,required_output_unknown:visa_class,visa_class_not_visible,visa_class_unknown|approval=": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=disqualifying_flag:planetary_embargo|review=arrival_date_unknown,fee_status_unknown,required_output_unknown:applicant_name,required_output_unknown:arrival_date,required_output_unknown:fee_status,required_output_unknown:visa_class,visa_class_not_visible,visa_class_unknown|approval=": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=disqualifying_flag:planetary_embargo|review=fee_status_unknown,required_output_unknown:fee_status,required_output_unknown:visa_class,review_flag:illegible_biometrics,visa_class_not_visible,visa_class_unknown|approval=application_date_current_or_exempt": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=disqualifying_flag:planetary_embargo|review=fee_status_unknown,required_output_unknown:fee_status|approval=application_date_current_or_exempt,diplomatic_sponsor_exemption": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=disqualifying_flag:planetary_embargo|review=fee_status_unknown,required_output_unknown:fee_status|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=disqualifying_flag:planetary_embargo|review=required_output_unknown:applicant_name,review_flag:illegible_biometrics|approval=application_date_current_or_exempt,fee_paid,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=embargoed_home_world:*,transit_work_authorization|review=fee_status_unknown,required_output_unknown:fee_status,required_output_unknown:sponsor_id,required_sponsor_unknown|approval=application_date_current_or_exempt": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=embargoed_home_world:*,transit_work_authorization|review=review_flag:identity_conflict,review_flag:illegible_biometrics,unsupported_fee_waiver|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=embargoed_home_world:*,unpaid_without_valid_waiver|review=arrival_date_unknown,required_output_unknown:arrival_date,required_output_unknown:declared_purpose,required_output_unknown:risk_flags,required_output_unknown:visa_class,risk_flags_unknown,visa_class_not_visible,visa_class_unknown|approval=": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=embargoed_home_world:*|review=arrival_date_unknown,clean_biohazard_check_missing,fee_status_unknown,required_output_unknown:applicant_name,required_output_unknown:arrival_date,required_output_unknown:declared_purpose,required_output_unknown:fee_status,required_output_unknown:risk_flags,required_output_unknown:species_code,required_output_unknown:sponsor_id,required_sponsor_unknown,risk_flags_unknown|approval=": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=embargoed_home_world:*|review=arrival_date_unknown,clean_biohazard_check_missing,fee_status_unknown,required_output_unknown:arrival_date,required_output_unknown:fee_status,required_output_unknown:risk_flags,risk_flags_unknown|approval=sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=embargoed_home_world:*|review=arrival_date_unknown,fee_status_unknown,required_output_unknown:arrival_date,required_output_unknown:declared_purpose,required_output_unknown:fee_status,required_output_unknown:risk_flags,risk_flags_unknown,unresolved_linkage:*|approval=sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=embargoed_home_world:*|review=arrival_date_unknown,required_output_unknown:arrival_date,required_output_unknown:declared_purpose,required_output_unknown:risk_flags,required_output_unknown:sponsor_id,required_output_unknown:visa_class,risk_flags_unknown,unsupported_fee_waiver,visa_class_not_visible,visa_class_unknown|approval=": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=embargoed_home_world:*|review=clean_biohazard_check_missing,fee_status_unknown,required_output_unknown:fee_status,required_output_unknown:risk_flags,required_output_unknown:sponsor_id,required_sponsor_unknown,risk_flags_unknown|approval=application_date_current_or_exempt": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=embargoed_home_world:*|review=clean_biohazard_check_missing,required_output_unknown:risk_flags,risk_flags_unknown,unsupported_fee_waiver|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=embargoed_home_world:*|review=clean_biohazard_check_missing,required_output_unknown:risk_flags,risk_flags_unknown|approval=application_date_current_or_exempt,fee_paid,sponsor_present_and_not_publicly_barred": [
+        2,
+        2
+      ],
+      "DENIED|source=rules|denial=embargoed_home_world:*|review=fee_status_unknown,required_output_unknown:applicant_name,required_output_unknown:fee_status,required_output_unknown:risk_flags,risk_flags_unknown|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=embargoed_home_world:*|review=fee_status_unknown,required_output_unknown:fee_status,required_output_unknown:risk_flags,required_output_unknown:species_code,required_output_unknown:sponsor_id,required_sponsor_unknown,risk_flags_unknown|approval=application_date_current_or_exempt": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=embargoed_home_world:*|review=fee_status_unknown,required_output_unknown:fee_status,required_output_unknown:risk_flags,required_output_unknown:species_code,risk_flags_unknown|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=embargoed_home_world:*|review=required_output_unknown:risk_flags,required_output_unknown:sponsor_id,required_sponsor_unknown,risk_flags_unknown|approval=application_date_current_or_exempt,fee_paid": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=embargoed_home_world:*|review=required_output_unknown:risk_flags,risk_flags_unknown,unsupported_fee_waiver|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        2,
+        2
+      ],
+      "DENIED|source=rules|denial=embargoed_home_world:*|review=required_output_unknown:risk_flags,risk_flags_unknown|approval=application_date_current_or_exempt,fee_paid,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=embargoed_home_world:*|review=required_output_unknown:species_code,required_output_unknown:sponsor_id,required_sponsor_unknown|approval=application_date_current_or_exempt,fee_paid": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=stale_application|review=clean_biohazard_check_missing,fee_status_unknown,required_output_unknown:fee_status,required_output_unknown:risk_flags,risk_flags_unknown|approval=sponsor_present_and_not_publicly_barred": [
+        2,
+        2
+      ],
+      "DENIED|source=rules|denial=stale_application|review=clean_biohazard_check_missing,fee_status_unknown,required_output_unknown:fee_status,review_flag:illegible_biometrics|approval=sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=stale_application|review=fee_status_unknown,required_output_unknown:fee_status,required_output_unknown:risk_flags,risk_flags_unknown|approval=sponsor_present_and_not_publicly_barred": [
+        2,
+        2
+      ],
+      "DENIED|source=rules|denial=stale_application|review=fee_status_unknown,required_output_unknown:fee_status,review_flag:illegible_biometrics|approval=sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=stale_application|review=required_output_unknown:risk_flags,risk_flags_unknown,unsupported_fee_waiver|approval=sponsor_present_and_not_publicly_barred": [
+        3,
+        3
+      ],
+      "DENIED|source=rules|denial=stale_application|review=required_output_unknown:risk_flags,risk_flags_unknown|approval=fee_paid,sponsor_present_and_not_publicly_barred": [
+        3,
+        3
+      ],
+      "DENIED|source=rules|denial=stale_application|review=|approval=fee_paid,no_visible_biohazard_risk,sponsor_present_and_not_publicly_barred": [
+        3,
+        3
+      ],
+      "DENIED|source=rules|denial=transit_work_authorization,unpaid_without_valid_waiver|review=required_output_unknown:risk_flags,risk_flags_unknown|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=transit_work_authorization|review=arrival_date_unknown,fee_status_unknown,required_output_unknown:applicant_name,required_output_unknown:arrival_date,required_output_unknown:fee_status,required_output_unknown:home_world,required_output_unknown:risk_flags,required_output_unknown:species_code,risk_flags_unknown|approval=sponsor_present_and_not_publicly_barred": [
+        0,
+        1
+      ],
+      "DENIED|source=rules|denial=transit_work_authorization|review=arrival_date_unknown,fee_status_unknown,required_output_unknown:arrival_date,required_output_unknown:fee_status,required_output_unknown:home_world,required_output_unknown:risk_flags,required_output_unknown:species_code,risk_flags_unknown|approval=sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=transit_work_authorization|review=arrival_date_unknown,fee_status_unknown,required_output_unknown:arrival_date,required_output_unknown:fee_status|approval=sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=transit_work_authorization|review=arrival_date_unknown,required_output_unknown:arrival_date,required_output_unknown:declared_purpose,required_output_unknown:sponsor_id,required_sponsor_unknown,review_flag:rescinded_denial|approval=fee_paid": [
+        0,
+        1
+      ],
+      "DENIED|source=rules|denial=transit_work_authorization|review=fee_status_unknown,required_output_unknown:fee_status,required_output_unknown:risk_flags,risk_flags_unknown|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=transit_work_authorization|review=fee_status_unknown,required_output_unknown:fee_status|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        3,
+        3
+      ],
+      "DENIED|source=rules|denial=transit_work_authorization|review=required_output_unknown:risk_flags,required_output_unknown:species_code,required_output_unknown:sponsor_id,required_sponsor_unknown,risk_flags_unknown|approval=application_date_current_or_exempt,fee_paid": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=transit_work_authorization|review=required_output_unknown:risk_flags,risk_flags_unknown,unsupported_fee_waiver|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        3,
+        3
+      ],
+      "DENIED|source=rules|denial=transit_work_authorization|review=required_output_unknown:risk_flags,risk_flags_unknown|approval=application_date_current_or_exempt,fee_paid,sponsor_present_and_not_publicly_barred": [
+        8,
+        8
+      ],
+      "DENIED|source=rules|denial=transit_work_authorization|review=|approval=application_date_current_or_exempt,fee_paid,sponsor_present_and_not_publicly_barred": [
+        4,
+        4
+      ],
+      "DENIED|source=rules|denial=unpaid_without_valid_waiver|review=arrival_date_unknown,required_output_unknown:arrival_date,required_output_unknown:home_world,required_output_unknown:risk_flags,required_output_unknown:species_code,risk_flags_unknown|approval=sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=unpaid_without_valid_waiver|review=clean_biohazard_check_missing,required_output_unknown:risk_flags,risk_flags_unknown|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=unpaid_without_valid_waiver|review=required_output_unknown:home_world,required_output_unknown:risk_flags,risk_flags_unknown|approval=application_date_current_or_exempt,diplomatic_sponsor_exemption": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=unpaid_without_valid_waiver|review=required_output_unknown:home_world,required_output_unknown:sponsor_id,required_sponsor_unknown|approval=application_date_current_or_exempt,no_visible_biohazard_risk": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=unpaid_without_valid_waiver|review=required_output_unknown:risk_flags,risk_flags_unknown|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        5,
+        5
+      ],
+      "DENIED|source=rules|denial=unpaid_without_valid_waiver|review=required_output_unknown:visa_class,visa_class_not_visible,visa_class_unknown|approval=application_date_current_or_exempt": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=unpaid_without_valid_waiver|review=review_flag:illegible_biometrics|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "DENIED|source=rules|denial=unpaid_without_valid_waiver|review=|approval=application_date_current_or_exempt,diplomatic_sponsor_exemption": [
+        3,
+        3
+      ],
+      "DENIED|source=rules|denial=unpaid_without_valid_waiver|review=|approval=application_date_current_or_exempt,no_visible_biohazard_risk,sponsor_present_and_not_publicly_barred": [
+        2,
+        2
+      ],
+      "DENIED|source=rules|denial=unpaid_without_valid_waiver|review=|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        2,
+        2
+      ],
+      "NEEDS_REVIEW|source=authoritative|denial=|review=arrival_date_unknown,fee_status_unknown,required_output_unknown:arrival_date,required_output_unknown:fee_status,required_output_unknown:species_code,review_flag:illegible_biometrics,unresolved_linkage:*|approval=sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=authoritative|denial=|review=authoritative_visible_decision|approval=": [
+        50,
+        50
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,clean_biohazard_check_missing,fee_status_unknown,required_output_unknown:arrival_date,required_output_unknown:fee_status,required_output_unknown:home_world,required_output_unknown:risk_flags,required_output_unknown:species_code,risk_flags_unknown|approval=sponsor_present_and_not_publicly_barred": [
+        0,
+        3
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,clean_biohazard_check_missing,required_output_unknown:arrival_date,required_output_unknown:home_world,required_output_unknown:risk_flags,risk_flags_unknown|approval=fee_paid,sponsor_present_and_not_publicly_barred": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,clean_biohazard_check_missing,required_output_unknown:arrival_date,required_output_unknown:risk_flags,required_output_unknown:species_code,risk_flags_unknown,unsupported_fee_waiver|approval=sponsor_present_and_not_publicly_barred": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,fee_status_unknown,required_output_unknown:applicant_name,required_output_unknown:arrival_date,required_output_unknown:declared_purpose,required_output_unknown:fee_status,required_output_unknown:home_world,required_output_unknown:risk_flags,required_output_unknown:species_code,required_output_unknown:sponsor_id,required_output_unknown:visa_class,risk_flags_unknown,visa_class_not_visible,visa_class_unknown|approval=": [
+        0,
+        6
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,fee_status_unknown,required_output_unknown:applicant_name,required_output_unknown:arrival_date,required_output_unknown:declared_purpose,required_output_unknown:fee_status,required_output_unknown:risk_flags,required_output_unknown:species_code,required_output_unknown:sponsor_id,required_output_unknown:visa_class,risk_flags_unknown,visa_class_not_visible,visa_class_unknown|approval=": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,fee_status_unknown,required_output_unknown:applicant_name,required_output_unknown:arrival_date,required_output_unknown:declared_purpose,required_output_unknown:fee_status,required_output_unknown:risk_flags,required_output_unknown:sponsor_id,required_output_unknown:visa_class,risk_flags_unknown,visa_class_not_visible,visa_class_unknown|approval=": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,fee_status_unknown,required_output_unknown:applicant_name,required_output_unknown:arrival_date,required_output_unknown:declared_purpose,required_output_unknown:fee_status,required_output_unknown:sponsor_id,required_output_unknown:visa_class,visa_class_not_visible,visa_class_unknown|approval=": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,fee_status_unknown,required_output_unknown:applicant_name,required_output_unknown:arrival_date,required_output_unknown:declared_purpose,required_output_unknown:home_world,required_output_unknown:risk_flags,required_output_unknown:species_code,required_output_unknown:sponsor_id,required_output_unknown:visa_class,risk_flags_unknown,visa_class_not_visible,visa_class_unknown|approval=": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,fee_status_unknown,required_output_unknown:applicant_name,required_output_unknown:arrival_date,required_output_unknown:fee_status,required_output_unknown:home_world,required_output_unknown:risk_flags,required_output_unknown:species_code,risk_flags_unknown|approval=diplomatic_sponsor_exemption": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,fee_status_unknown,required_output_unknown:arrival_date,required_output_unknown:declared_purpose,required_output_unknown:fee_status,required_output_unknown:home_world,required_output_unknown:risk_flags,required_output_unknown:species_code,required_output_unknown:sponsor_id,required_output_unknown:visa_class,risk_flags_unknown,visa_class_not_visible,visa_class_unknown|approval=": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,fee_status_unknown,required_output_unknown:arrival_date,required_output_unknown:declared_purpose,required_output_unknown:fee_status,required_output_unknown:home_world,required_output_unknown:risk_flags,required_output_unknown:species_code,required_output_unknown:visa_class,risk_flags_unknown,visa_class_not_visible,visa_class_unknown|approval=": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,fee_status_unknown,required_output_unknown:arrival_date,required_output_unknown:declared_purpose,required_output_unknown:fee_status,required_output_unknown:home_world,required_output_unknown:risk_flags,required_output_unknown:species_code,risk_flags_unknown|approval=diplomatic_sponsor_exemption": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,fee_status_unknown,required_output_unknown:arrival_date,required_output_unknown:declared_purpose,required_output_unknown:fee_status,required_output_unknown:home_world,required_output_unknown:risk_flags,required_output_unknown:visa_class,risk_flags_unknown,visa_class_not_visible,visa_class_unknown|approval=": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,fee_status_unknown,required_output_unknown:arrival_date,required_output_unknown:declared_purpose,required_output_unknown:fee_status,required_output_unknown:home_world,required_output_unknown:risk_flags,risk_flags_unknown|approval=diplomatic_sponsor_exemption": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,fee_status_unknown,required_output_unknown:arrival_date,required_output_unknown:declared_purpose,required_output_unknown:fee_status,required_output_unknown:home_world,required_output_unknown:sponsor_id,required_output_unknown:visa_class,review_flag:sponsor_mismatch,visa_class_not_visible,visa_class_unknown|approval=": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,fee_status_unknown,required_output_unknown:arrival_date,required_output_unknown:declared_purpose,required_output_unknown:fee_status,required_output_unknown:home_world,required_output_unknown:sponsor_id,required_output_unknown:visa_class,visa_class_not_visible,visa_class_unknown|approval=": [
+        0,
+        2
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,fee_status_unknown,required_output_unknown:arrival_date,required_output_unknown:declared_purpose,required_output_unknown:fee_status,required_output_unknown:home_world,required_output_unknown:visa_class,visa_class_not_visible,visa_class_unknown|approval=": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,fee_status_unknown,required_output_unknown:arrival_date,required_output_unknown:fee_status,required_output_unknown:home_world,required_output_unknown:risk_flags,required_output_unknown:species_code,required_output_unknown:sponsor_id,required_sponsor_unknown,risk_flags_unknown|approval=": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,fee_status_unknown,required_output_unknown:arrival_date,required_output_unknown:fee_status,required_output_unknown:home_world,required_output_unknown:risk_flags,required_output_unknown:species_code,required_output_unknown:visa_class,risk_flags_unknown,visa_class_not_visible,visa_class_unknown|approval=": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,fee_status_unknown,required_output_unknown:arrival_date,required_output_unknown:fee_status,required_output_unknown:home_world,required_output_unknown:risk_flags,required_output_unknown:species_code,risk_flags_unknown|approval=diplomatic_sponsor_exemption": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,fee_status_unknown,required_output_unknown:arrival_date,required_output_unknown:fee_status,required_output_unknown:home_world,required_output_unknown:risk_flags,risk_flags_unknown|approval=diplomatic_sponsor_exemption": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,fee_status_unknown,required_output_unknown:arrival_date,required_output_unknown:fee_status,required_output_unknown:home_world,required_output_unknown:species_code,review_flag:illegible_biometrics|approval=sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,fee_status_unknown,required_output_unknown:arrival_date,required_output_unknown:fee_status,required_output_unknown:home_world|approval=diplomatic_sponsor_exemption": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,fee_status_unknown,required_output_unknown:arrival_date,required_output_unknown:fee_status,required_output_unknown:home_world|approval=sponsor_present_and_not_publicly_barred": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,fee_status_unknown,required_output_unknown:arrival_date,required_output_unknown:fee_status,required_output_unknown:risk_flags,risk_flags_unknown|approval=diplomatic_sponsor_exemption": [
+        2,
+        2
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,fee_status_unknown,required_output_unknown:arrival_date,required_output_unknown:fee_status|approval=diplomatic_sponsor_exemption": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,fee_status_unknown,required_output_unknown:arrival_date,required_output_unknown:fee_status|approval=no_visible_biohazard_risk,sponsor_present_and_not_publicly_barred": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,fee_status_unknown,required_output_unknown:arrival_date,required_output_unknown:fee_status|approval=sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,required_output_unknown:applicant_name,required_output_unknown:arrival_date,required_output_unknown:declared_purpose,required_output_unknown:home_world,required_output_unknown:risk_flags,required_output_unknown:species_code,required_output_unknown:sponsor_id,required_output_unknown:visa_class,risk_flags_unknown,unsupported_fee_waiver,visa_class_not_visible,visa_class_unknown|approval=": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,required_output_unknown:applicant_name,required_output_unknown:arrival_date,required_output_unknown:declared_purpose,required_output_unknown:home_world,required_output_unknown:risk_flags,required_output_unknown:species_code,required_output_unknown:sponsor_id,required_output_unknown:visa_class,risk_flags_unknown,visa_class_not_visible,visa_class_unknown|approval=fee_paid": [
+        0,
+        3
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,required_output_unknown:applicant_name,required_output_unknown:arrival_date,required_output_unknown:declared_purpose,required_output_unknown:home_world,required_output_unknown:risk_flags,required_output_unknown:sponsor_id,required_output_unknown:visa_class,risk_flags_unknown,visa_class_not_visible,visa_class_unknown|approval=fee_paid": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,required_output_unknown:applicant_name,required_output_unknown:arrival_date,required_output_unknown:declared_purpose,required_output_unknown:risk_flags,required_output_unknown:species_code,required_output_unknown:sponsor_id,required_output_unknown:visa_class,risk_flags_unknown,visa_class_not_visible,visa_class_unknown|approval=fee_paid": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,required_output_unknown:arrival_date,required_output_unknown:home_world,required_output_unknown:risk_flags,required_output_unknown:sponsor_id,required_sponsor_unknown,risk_flags_unknown|approval=fee_paid": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,required_output_unknown:arrival_date,required_output_unknown:home_world,required_output_unknown:species_code,review_flag:illegible_biometrics|approval=diplomatic_sponsor_exemption,valid_fee_waiver": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,required_output_unknown:arrival_date,required_output_unknown:home_world,review_flag:illegible_biometrics|approval=fee_paid,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,required_output_unknown:arrival_date,required_output_unknown:risk_flags,risk_flags_unknown|approval=fee_paid,sponsor_present_and_not_publicly_barred": [
+        2,
+        2
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,required_output_unknown:arrival_date,required_output_unknown:species_code,required_output_unknown:sponsor_id,required_sponsor_unknown|approval=fee_paid,no_visible_biohazard_risk": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,required_output_unknown:arrival_date,review_flag:illegible_biometrics,review_flag:rescinded_denial,unsupported_fee_waiver|approval=sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,required_output_unknown:arrival_date|approval=diplomatic_sponsor_exemption,valid_fee_waiver": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=arrival_date_unknown,required_output_unknown:arrival_date|approval=fee_paid,sponsor_present_and_not_publicly_barred": [
+        1,
+        2
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=clean_biohazard_check_missing,fee_status_unknown,required_output_unknown:applicant_name,required_output_unknown:fee_status,required_output_unknown:home_world,review_flag:identity_conflict|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=clean_biohazard_check_missing,fee_status_unknown,required_output_unknown:declared_purpose,required_output_unknown:risk_flags,risk_flags_unknown|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=clean_biohazard_check_missing,fee_status_unknown,required_output_unknown:fee_status,required_output_unknown:home_world,required_output_unknown:risk_flags,risk_flags_unknown|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=clean_biohazard_check_missing,fee_status_unknown,required_output_unknown:fee_status,required_output_unknown:risk_flags,required_output_unknown:species_code,required_output_unknown:sponsor_id,required_sponsor_unknown,risk_flags_unknown|approval=application_date_current_or_exempt": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=clean_biohazard_check_missing,fee_status_unknown,required_output_unknown:fee_status,required_output_unknown:risk_flags,required_output_unknown:species_code,risk_flags_unknown|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=clean_biohazard_check_missing,fee_status_unknown,required_output_unknown:fee_status,required_output_unknown:risk_flags,risk_flags_unknown|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        4,
+        9
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=clean_biohazard_check_missing,fee_status_unknown,required_output_unknown:fee_status,required_output_unknown:species_code,review_flag:illegible_biometrics|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=clean_biohazard_check_missing,fee_status_unknown,required_output_unknown:fee_status,review_flag:illegible_biometrics|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=clean_biohazard_check_missing,fee_status_unknown,required_output_unknown:home_world,review_flag:illegible_biometrics|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=clean_biohazard_check_missing,fee_status_unknown,required_output_unknown:risk_flags,risk_flags_unknown|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        2,
+        2
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=clean_biohazard_check_missing,required_output_unknown:risk_flags,required_output_unknown:sponsor_id,required_sponsor_unknown,risk_flags_unknown|approval=application_date_current_or_exempt,fee_paid": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=clean_biohazard_check_missing,required_output_unknown:risk_flags,risk_flags_unknown,unsupported_fee_waiver|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        3,
+        7
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=clean_biohazard_check_missing,required_output_unknown:risk_flags,risk_flags_unknown|approval=application_date_current_or_exempt,fee_paid,sponsor_present_and_not_publicly_barred": [
+        2,
+        22
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=clean_biohazard_check_missing,review_flag:illegible_biometrics,unsupported_fee_waiver|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=clean_biohazard_check_missing,review_flag:illegible_biometrics|approval=application_date_current_or_exempt,fee_paid,sponsor_present_and_not_publicly_barred": [
+        4,
+        4
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=clean_biohazard_check_missing,review_flag:sponsor_mismatch,unsupported_fee_waiver|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:applicant_name,required_output_unknown:fee_status,required_output_unknown:home_world,required_output_unknown:risk_flags,risk_flags_unknown|approval=application_date_current_or_exempt,diplomatic_sponsor_exemption": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:applicant_name,required_output_unknown:fee_status,required_output_unknown:home_world,review_flag:identity_conflict|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:applicant_name,required_output_unknown:fee_status,required_output_unknown:risk_flags,risk_flags_unknown|approval=application_date_current_or_exempt,diplomatic_sponsor_exemption": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:applicant_name,required_output_unknown:fee_status,required_output_unknown:risk_flags,risk_flags_unknown|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:declared_purpose,required_output_unknown:fee_status,required_output_unknown:home_world,required_output_unknown:risk_flags,required_output_unknown:species_code,required_output_unknown:visa_class,risk_flags_unknown,visa_class_not_visible,visa_class_unknown|approval=application_date_current_or_exempt": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:declared_purpose,required_output_unknown:fee_status,required_output_unknown:home_world,required_output_unknown:species_code,required_output_unknown:sponsor_id,required_output_unknown:visa_class,review_flag:identity_conflict,visa_class_not_visible,visa_class_unknown|approval=application_date_current_or_exempt": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:declared_purpose,required_output_unknown:fee_status,required_output_unknown:home_world,required_output_unknown:sponsor_id,required_output_unknown:visa_class,review_flag:illegible_biometrics,visa_class_not_visible,visa_class_unknown|approval=application_date_current_or_exempt": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:declared_purpose,required_output_unknown:fee_status,required_output_unknown:risk_flags,required_output_unknown:sponsor_id,required_output_unknown:visa_class,risk_flags_unknown,visa_class_not_visible,visa_class_unknown|approval=application_date_current_or_exempt": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:declared_purpose,required_output_unknown:fee_status,required_output_unknown:risk_flags,risk_flags_unknown|approval=application_date_current_or_exempt,diplomatic_sponsor_exemption": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:declared_purpose,required_output_unknown:fee_status,required_output_unknown:sponsor_id,required_output_unknown:visa_class,visa_class_not_visible,visa_class_unknown|approval=application_date_current_or_exempt": [
+        0,
+        3
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:declared_purpose,required_output_unknown:fee_status,required_output_unknown:visa_class,review_flag:illegible_biometrics,visa_class_not_visible,visa_class_unknown|approval=application_date_current_or_exempt": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:declared_purpose,required_output_unknown:fee_status,review_flag:sponsor_mismatch|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:declared_purpose,required_output_unknown:sponsor_id,required_output_unknown:visa_class,visa_class_not_visible,visa_class_unknown|approval=application_date_current_or_exempt": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:declared_purpose,review_flag:illegible_biometrics|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:fee_status,required_output_unknown:home_world,review_flag:illegible_biometrics,review_flag:rescinded_denial|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:fee_status,required_output_unknown:risk_flags,required_output_unknown:sponsor_id,required_output_unknown:visa_class,risk_flags_unknown,visa_class_not_visible,visa_class_unknown|approval=application_date_current_or_exempt": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:fee_status,required_output_unknown:risk_flags,required_output_unknown:sponsor_id,required_sponsor_unknown,risk_flags_unknown|approval=application_date_current_or_exempt": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:fee_status,required_output_unknown:risk_flags,required_output_unknown:visa_class,risk_flags_unknown,visa_class_not_visible,visa_class_unknown|approval=application_date_current_or_exempt": [
+        2,
+        2
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:fee_status,required_output_unknown:risk_flags,risk_flags_unknown,stale_diplomatic_note_missing|approval=diplomatic_sponsor_exemption": [
+        0,
+        2
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:fee_status,required_output_unknown:risk_flags,risk_flags_unknown,unresolved_linkage:*|approval=application_date_current_or_exempt,diplomatic_sponsor_exemption": [
+        2,
+        2
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:fee_status,required_output_unknown:risk_flags,risk_flags_unknown|approval=application_date_current_or_exempt,diplomatic_sponsor_exemption": [
+        2,
+        9
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:fee_status,required_output_unknown:risk_flags,risk_flags_unknown|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        8,
+        16
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:fee_status,required_output_unknown:sponsor_id,required_sponsor_unknown|approval=application_date_current_or_exempt,no_visible_biohazard_risk": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:fee_status,required_output_unknown:visa_class,review_flag:illegible_biometrics,review_flag:sponsor_mismatch,visa_class_not_visible,visa_class_unknown|approval=application_date_current_or_exempt": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:fee_status,review_flag:identity_conflict,review_flag:illegible_biometrics|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:fee_status,review_flag:identity_conflict|approval=application_date_current_or_exempt,diplomatic_sponsor_exemption": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:fee_status,review_flag:illegible_biometrics,review_flag:rescinded_denial|approval=application_date_current_or_exempt,diplomatic_sponsor_exemption": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:fee_status,review_flag:illegible_biometrics|approval=application_date_current_or_exempt,diplomatic_sponsor_exemption": [
+        4,
+        4
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:fee_status,review_flag:illegible_biometrics|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        4,
+        4
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:fee_status,review_flag:sponsor_mismatch|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:fee_status|approval=application_date_current_or_exempt,diplomatic_sponsor_exemption": [
+        2,
+        10
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:fee_status|approval=application_date_current_or_exempt,no_visible_biohazard_risk,sponsor_present_and_not_publicly_barred": [
+        1,
+        6
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:fee_status|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        2,
+        14
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:home_world,required_output_unknown:visa_class,visa_class_not_visible,visa_class_unknown|approval=application_date_current_or_exempt": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:risk_flags,risk_flags_unknown|approval=application_date_current_or_exempt,diplomatic_sponsor_exemption": [
+        4,
+        4
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,required_output_unknown:risk_flags,risk_flags_unknown|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        2,
+        2
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,review_flag:illegible_biometrics|approval=application_date_current_or_exempt,diplomatic_sponsor_exemption": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown,review_flag:illegible_biometrics|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown|approval=application_date_current_or_exempt,diplomatic_sponsor_exemption": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=fee_status_unknown|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        3,
+        3
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=required_output_unknown:applicant_name,required_output_unknown:declared_purpose,required_output_unknown:home_world,required_output_unknown:visa_class,review_flag:illegible_biometrics,visa_class_not_visible,visa_class_unknown|approval=application_date_current_or_exempt,fee_paid": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=required_output_unknown:applicant_name,required_output_unknown:declared_purpose,required_output_unknown:home_world|approval=application_date_current_or_exempt,diplomatic_sponsor_exemption,valid_fee_waiver": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=required_output_unknown:applicant_name,required_output_unknown:declared_purpose,required_output_unknown:risk_flags,required_output_unknown:species_code,required_output_unknown:sponsor_id,required_output_unknown:visa_class,risk_flags_unknown,visa_class_not_visible,visa_class_unknown|approval=application_date_current_or_exempt,fee_paid": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=required_output_unknown:declared_purpose,required_output_unknown:home_world,required_output_unknown:risk_flags,required_output_unknown:sponsor_id,required_output_unknown:visa_class,risk_flags_unknown,unsupported_fee_waiver,visa_class_not_visible,visa_class_unknown|approval=application_date_current_or_exempt": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=required_output_unknown:declared_purpose,required_output_unknown:home_world,required_output_unknown:risk_flags,required_output_unknown:sponsor_id,required_output_unknown:visa_class,risk_flags_unknown,visa_class_not_visible,visa_class_unknown|approval=application_date_current_or_exempt,fee_paid": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=required_output_unknown:declared_purpose,required_output_unknown:home_world,required_output_unknown:risk_flags,risk_flags_unknown|approval=application_date_current_or_exempt,fee_paid,sponsor_present_and_not_publicly_barred": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=required_output_unknown:declared_purpose,required_output_unknown:home_world,required_output_unknown:sponsor_id,required_sponsor_unknown|approval=application_date_current_or_exempt,fee_paid": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=required_output_unknown:declared_purpose,required_output_unknown:risk_flags,required_output_unknown:sponsor_id,required_output_unknown:visa_class,risk_flags_unknown,visa_class_not_visible,visa_class_unknown|approval=application_date_current_or_exempt,fee_paid": [
+        0,
+        2
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=required_output_unknown:declared_purpose,required_output_unknown:risk_flags,risk_flags_unknown|approval=application_date_current_or_exempt,diplomatic_sponsor_exemption,fee_paid": [
+        1,
+        2
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=required_output_unknown:declared_purpose,required_output_unknown:sponsor_id,required_sponsor_unknown|approval=application_date_current_or_exempt,fee_paid,no_visible_biohazard_risk": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=required_output_unknown:home_world,required_output_unknown:risk_flags,required_output_unknown:visa_class,risk_flags_unknown,visa_class_not_visible,visa_class_unknown|approval=application_date_current_or_exempt,fee_paid": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=required_output_unknown:home_world,required_output_unknown:risk_flags,risk_flags_unknown|approval=application_date_current_or_exempt,diplomatic_sponsor_exemption,valid_fee_waiver": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=required_output_unknown:home_world,required_output_unknown:species_code,review_flag:illegible_biometrics|approval=application_date_current_or_exempt,diplomatic_sponsor_exemption,fee_paid": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=required_output_unknown:risk_flags,required_output_unknown:species_code,risk_flags_unknown|approval=application_date_current_or_exempt,diplomatic_sponsor_exemption,valid_fee_waiver": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=required_output_unknown:risk_flags,required_output_unknown:species_code,risk_flags_unknown|approval=application_date_current_or_exempt,fee_paid,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=required_output_unknown:risk_flags,required_output_unknown:sponsor_id,required_sponsor_unknown,risk_flags_unknown|approval=application_date_current_or_exempt,fee_paid": [
+        0,
+        2
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=required_output_unknown:risk_flags,required_output_unknown:visa_class,risk_flags_unknown,unsupported_fee_waiver,visa_class_not_visible,visa_class_unknown|approval=application_date_current_or_exempt": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=required_output_unknown:risk_flags,required_output_unknown:visa_class,risk_flags_unknown,visa_class_not_visible,visa_class_unknown|approval=application_date_current_or_exempt,fee_paid": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=required_output_unknown:risk_flags,risk_flags_unknown,stale_diplomatic_note_missing|approval=diplomatic_sponsor_exemption,fee_paid": [
+        0,
+        3
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=required_output_unknown:risk_flags,risk_flags_unknown,stale_diplomatic_note_missing|approval=diplomatic_sponsor_exemption,valid_fee_waiver": [
+        0,
+        2
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=required_output_unknown:risk_flags,risk_flags_unknown,unsupported_fee_waiver|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        7,
+        12
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=required_output_unknown:risk_flags,risk_flags_unknown|approval=application_date_current_or_exempt,diplomatic_sponsor_exemption,fee_paid": [
+        9,
+        19
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=required_output_unknown:risk_flags,risk_flags_unknown|approval=application_date_current_or_exempt,diplomatic_sponsor_exemption,valid_fee_waiver": [
+        3,
+        9
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=required_output_unknown:risk_flags,risk_flags_unknown|approval=application_date_current_or_exempt,fee_paid,sponsor_present_and_not_publicly_barred": [
+        8,
+        34
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=required_output_unknown:sponsor_id,required_sponsor_unknown|approval=application_date_current_or_exempt,fee_paid": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=required_output_unknown:visa_class,visa_class_not_visible,visa_class_unknown|approval=application_date_current_or_exempt,fee_paid": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=review_flag:identity_conflict,review_flag:illegible_biometrics|approval=application_date_current_or_exempt,fee_paid,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=review_flag:identity_conflict,unsupported_fee_waiver|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=review_flag:identity_conflict|approval=application_date_current_or_exempt,fee_paid,sponsor_present_and_not_publicly_barred": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=review_flag:illegible_biometrics,review_flag:rescinded_denial|approval=application_date_current_or_exempt,diplomatic_sponsor_exemption,fee_paid": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=review_flag:illegible_biometrics,stale_diplomatic_note_missing|approval=diplomatic_sponsor_exemption,fee_paid": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=review_flag:illegible_biometrics|approval=application_date_current_or_exempt,fee_paid,sponsor_present_and_not_publicly_barred": [
+        6,
+        6
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=review_flag:rescinded_denial|approval=application_date_current_or_exempt,diplomatic_sponsor_exemption,fee_paid": [
+        1,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=stale_diplomatic_note_missing|approval=diplomatic_sponsor_exemption,fee_paid": [
+        0,
+        1
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=unsupported_fee_waiver|approval=application_date_current_or_exempt,no_visible_biohazard_risk,sponsor_present_and_not_publicly_barred": [
+        1,
+        4
+      ],
+      "NEEDS_REVIEW|source=rules|denial=|review=unsupported_fee_waiver|approval=application_date_current_or_exempt,sponsor_present_and_not_publicly_barred": [
+        1,
+        5
+      ]
+    }
+  },
+  "schema_version": 2
+}

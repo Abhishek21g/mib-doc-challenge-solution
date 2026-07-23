@@ -1,0 +1,79 @@
+{
+  "artifact_id": "output-review-confidence-ridge-v1",
+  "schema_version": 1,
+  "fit_metadata": {
+    "fit_split": "public-tuning700-current-combined-denied",
+    "selection_split": "public-calibration150-current-combined-denied",
+    "release_labels_opened_during_selection": false,
+    "target": "emitted_adjudication_is_correct",
+    "method": "ridge_brier_regression_with_frozen_output_semantics",
+    "five_fold_oof_score_delta": 0.0823741741863332,
+    "tuning_score_delta": 0.15474934685974773,
+    "calibration_score_delta": 0.09522917978162959
+  },
+  "model": {
+    "ridge_strength": 0.3,
+    "blend": 1.0,
+    "probability_clip": [
+      0.02,
+      0.98
+    ],
+    "guard": {
+      "adjudication": "NEEDS_REVIEW",
+      "maximum_exclusive_input_confidence": 0.9
+    },
+    "feature_order": [
+      "bias",
+      "p",
+      "p2",
+      "output=APPROVED",
+      "output=DENIED",
+      "output=NEEDS_REVIEW",
+      "p_output=APPROVED",
+      "p_output=DENIED",
+      "p_output=NEEDS_REVIEW",
+      "unknown=applicant_name",
+      "unknown=species_code",
+      "unknown=home_world",
+      "unknown=visa_class",
+      "unknown=sponsor_id",
+      "unknown=arrival_date",
+      "unknown=declared_purpose",
+      "unknown=risk_flags",
+      "unknown=fee_status",
+      "unknown_count",
+      "risk_non_none",
+      "fee_paid",
+      "fee_waived",
+      "fee_unpaid",
+      "fee_unknown"
+    ],
+    "coefficients": [
+      0.13903222479136218,
+      0.8981349771563721,
+      -0.2909134823332467,
+      0.4136909689555733,
+      -0.21344825389735364,
+      -0.20024271504648142,
+      -0.13687921630225658,
+      0.5151889043484748,
+      0.5198252891097424,
+      -0.0716261111966837,
+      0.0,
+      0.0,
+      0.0,
+      -0.058110394219331465,
+      0.03434731010064963,
+      0.0,
+      0.0,
+      0.07923183413989741,
+      -0.0017952623528308652,
+      -0.024530228664862604,
+      -0.01626187083638472,
+      -0.037362338560018714,
+      -0.025607624737578306,
+      0.07923183413991697
+    ]
+  },
+  "identity_policy": "Features contain only emitted adjudication, bounded confidence, generic unknown-field indicators, generic risk presence, and fee category; case IDs, names, sponsor/home values, and filenames are excluded."
+}

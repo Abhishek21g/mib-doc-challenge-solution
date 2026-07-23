@@ -1,92 +1,137 @@
+"""Typed seams between the batch runner and future processing stages."""
+
 from __future__ import annotations
 
-import json
-import sys
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Mapping, Protocol
 
-from .constants import FIELDNAMES
-from .visible_core import process_one
-
-
-def iter_pdfs(input_dir: Path) -> list[Path]:
-    return sorted(input_dir.glob("*.pdf"))
+from .models import PredictionRow
 
 
-def run_pipeline(
-    input_dir: Path,
-    output_path: Path,
-    workers: int = 4,
-) -> int:
-    pdfs = iter_pdfs(Path(input_dir))
-    output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    results: dict[str, dict] = {}
-    # Resume support: keep already-written JSONL rows if present.
-    if output_path.exists():
-        try:
-            with output_path.open(encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    row = json.loads(line)
-                    cid = row.get("case_id")
-                    if cid:
-                        results[cid] = row
-        except Exception:
-            results = {}
-    pending = [p for p in pdfs if p.stem not in results]
-    if not pending and results:
-        return len(results)
-
-    def _flush() -> None:
-        with output_path.open("w", encoding="utf-8") as f:
-            for case_id in sorted(results):
-                row = {k: results[case_id][k] for k in FIELDNAMES}
-                row["confidence"] = float(row["confidence"])
-                f.write(json.dumps(row, sort_keys=True) + "\n")
-
-    def _one(pdf_path: str) -> dict:
-        rec = process_one(pdf_path)
-        return {k: rec[k] for k in FIELDNAMES}
-
-    if workers <= 1 or len(pending) <= 1:
-        for i, pdf in enumerate(pending, 1):
-            rec = _one(str(pdf))
-            results[rec["case_id"]] = rec
-            if i % 25 == 0:
-                _flush()
-                print(f"checkpoint {len(results)}/{len(pdfs)}", file=sys.stderr)
-    else:
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            futures = {pool.submit(_one, str(pdf)): pdf for pdf in pending}
-            done = 0
-            for fut in as_completed(futures):
-                try:
-                    rec = fut.result()
-                    results[rec["case_id"]] = rec
-                except Exception as exc:  # noqa: BLE001
-                    pdf = futures[fut]
-                    print(f"WARN: failed {pdf.name}: {exc}", file=sys.stderr)
-                done += 1
-                if done % 25 == 0:
-                    _flush()
-                    print(f"checkpoint {len(results)}/{len(pdfs)}", file=sys.stderr)
-
-    _flush()
-    return len(results)
+class RendererStage(Protocol):
+    def render(self, pdf_path: Path) -> Any:
+        """Render one source PDF into visible page data."""
 
 
-def main(argv: list[str] | None = None) -> None:
-    argv = list(sys.argv[1:] if argv is None else argv)
-    if len(argv) != 2:
-        raise SystemExit("usage: solution.py <input_pdf_dir> <output_predictions_path>")
-    input_dir, output_path = argv
-    n = run_pipeline(Path(input_dir), Path(output_path), workers=4)
-    print(f"wrote {n} predictions to {output_path}", file=sys.stderr)
+class EvidenceExtractor(Protocol):
+    def extract(self, rendered_case: Any) -> Any:
+        """Extract visible candidate evidence from a rendered case."""
 
 
-if __name__ == "__main__":
-    main()
+class EvidenceResolver(Protocol):
+    def resolve(self, candidate_evidence: Any) -> Any:
+        """Link and resolve candidate evidence for the active case."""
+
+
+class Adjudicator(Protocol):
+    def adjudicate(self, resolved_case: Any) -> PredictionRow | Mapping[str, Any] | None:
+        """Return one prediction, or None for a technical omission."""
+
+
+class CaseProcessor(Protocol):
+    def process_case(self, pdf_path: Path) -> PredictionRow | Mapping[str, Any] | None:
+        """Process one case independently."""
+
+
+@dataclass
+class ProcessingPipeline:
+    """Composition seam for the four downstream processing stages."""
+
+    renderer: RendererStage
+    extractor: EvidenceExtractor
+    resolver: EvidenceResolver
+    adjudicator: Adjudicator
+
+    def process_case(self, pdf_path: Path) -> PredictionRow | Mapping[str, Any] | None:
+        rendered_case = self.renderer.render(pdf_path)
+        candidate_evidence = self.extractor.extract(rendered_case)
+        resolved_case = self.resolver.resolve(candidate_evidence)
+        return self.adjudicator.adjudicate(resolved_case)
+
+
+class SafeFallbackProcessor:
+    """Schema-valid placeholder until the processing stages are implemented.
+
+    The filename supplies the only derived value. All substantive fields use
+    conservative values and the case is routed to NEEDS_REVIEW rather than
+    being omitted solely because downstream logic is not yet available.
+    """
+
+    def process_case(self, pdf_path: Path) -> Mapping[str, Any]:
+        return {
+            "case_id": pdf_path.stem,
+            "applicant_name": "unknown",
+            "species_code": "unknown",
+            "home_world": "unknown",
+            "visa_class": "unknown",
+            "sponsor_id": "SPN-0000",
+            "arrival_date": "1900-01-01",
+            "declared_purpose": "unknown",
+            "risk_flags": "none",
+            "fee_status": "unknown",
+            "adjudication": "NEEDS_REVIEW",
+            "confidence": 0.0,
+        }
+
+
+@dataclass
+class RenderFirstFallbackProcessor:
+    """Exercise ingestion before conservative downstream stages exist."""
+
+    renderer: RendererStage
+    fallback: SafeFallbackProcessor
+
+    def process_case(self, pdf_path: Path) -> Mapping[str, Any]:
+        self.renderer.render(pdf_path)
+        return self.fallback.process_case(pdf_path)
+
+
+@dataclass
+class ExtractThenFallbackProcessor:
+    """Exercise visible extraction before resolution/adjudication exist."""
+
+    renderer: RendererStage
+    extractor: EvidenceExtractor
+    fallback: SafeFallbackProcessor
+
+    def process_case(self, pdf_path: Path) -> Mapping[str, Any]:
+        rendered = self.renderer.render(pdf_path)
+        self.extractor.extract(rendered)
+        return self.fallback.process_case(pdf_path)
+
+
+@dataclass
+class ResolveThenFallbackProcessor:
+    """Exercise linking/resolution before policy adjudication exists."""
+
+    renderer: RendererStage
+    extractor: EvidenceExtractor
+    linker: Any
+    resolver: EvidenceResolver
+    fallback: SafeFallbackProcessor
+
+    def process_case(self, pdf_path: Path) -> Mapping[str, Any]:
+        rendered = self.renderer.render(pdf_path)
+        candidates = self.extractor.extract(rendered)
+        linked_case = self.linker.link(rendered.case_id, candidates)
+        self.resolver.resolve(linked_case)
+        return self.fallback.process_case(pdf_path)
+
+
+@dataclass
+class AdjudicatingCaseProcessor:
+    """Run the complete visible-evidence path through deterministic policy."""
+
+    renderer: RendererStage
+    extractor: EvidenceExtractor
+    linker: Any
+    resolver: EvidenceResolver
+    adjudicator: Adjudicator
+
+    def process_case(self, pdf_path: Path) -> PredictionRow | Mapping[str, Any] | None:
+        rendered = self.renderer.render(pdf_path)
+        candidates = self.extractor.extract(rendered)
+        linked_case = self.linker.link(rendered.case_id, candidates)
+        resolved_case = self.resolver.resolve(linked_case)
+        return self.adjudicator.adjudicate(resolved_case)

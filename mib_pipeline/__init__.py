@@ -1,3 +1,146 @@
-"""MIB Doc Challenge offline intake pipeline."""
+"""Offline MIB document-processing pipeline."""
 
-__version__ = "0.1.0"
+from .batch import BatchRunReport, BatchRunner, discover_case_pdfs
+from .ingestion import (
+    DocumentRenderer,
+    RecoverableRenderError,
+    Rect,
+    RenderedCase,
+    RenderedPage,
+    TextLayerReader,
+    TextSpan,
+)
+from .extraction import (
+    CandidateEvidence,
+    EvidenceType,
+    OcrLine,
+    OcrToken,
+    RecoverableOcrError,
+    TesseractPsm6RefinementModel,
+    TesseractOcrEngine,
+    UntrustedContentFilter,
+    VisibleEvidenceExtractor,
+    VisualCueDetector,
+    group_ocr_lines,
+)
+from .models import FIELD_NAMES, PredictionRow, RowValidationError
+from .adjudication import (
+    AdjudicationEngine,
+    AdjudicationOutcome,
+    DecisionTrace,
+    GeneralizablePolicyExceptionStore,
+    PolicyArtifactError,
+    PolicyException,
+    PolicyRuleSet,
+)
+from .confidence import (
+    CalibrationArtifactError,
+    ConfidenceCalibrator,
+    DecisionSignalModel,
+    PinnedIsotonicMap,
+)
+from .decision_recovery import (
+    REVIEW_APPROVAL_CONFIDENCE,
+    REVIEW_DENIAL_CONFIDENCE,
+    REVIEW_DIPLOMATIC_APPROVAL_CONFIDENCE,
+    ReviewDenialRecoveryAdjudicator,
+)
+from .resolution import (
+    CaseLinker,
+    EvidencePrecedenceHierarchy,
+    EvidencePrecedenceResolver,
+    FieldState,
+    LinkedCase,
+    RescindedDecisionHandler,
+    ResolvedCase,
+    ResolvedField,
+)
+from .rapid_recovery import (
+    AUTHORITATIVE_MINIMUM_CONFIDENCE,
+    RAPID_OUTPUT_FIELDS,
+    RapidOcrEngine,
+    RapidOutputRecoveryProcessor,
+    build_rapid_extractor,
+)
+from .output_confidence import (
+    OutputConfidenceArtifactError,
+    OutputConfidenceRecalibrationProcessor,
+    OutputConfidenceRecalibrator,
+    PinnedOutputConfidenceMap,
+)
+from .pipeline import (
+    AdjudicatingCaseProcessor,
+    ExtractThenFallbackProcessor,
+    ProcessingPipeline,
+    RenderFirstFallbackProcessor,
+    ResolveThenFallbackProcessor,
+    SafeFallbackProcessor,
+)
+from .writer import CanonicalJsonlWriter, DuplicateCaseIdError
+
+__all__ = [
+    "AdjudicatingCaseProcessor",
+    "AdjudicationEngine",
+    "AdjudicationOutcome",
+    "AUTHORITATIVE_MINIMUM_CONFIDENCE",
+    "BatchRunReport",
+    "BatchRunner",
+    "CanonicalJsonlWriter",
+    "CandidateEvidence",
+    "CalibrationArtifactError",
+    "CaseLinker",
+    "ConfidenceCalibrator",
+    "DuplicateCaseIdError",
+    "DecisionTrace",
+    "DecisionSignalModel",
+    "DocumentRenderer",
+    "EvidenceType",
+    "EvidencePrecedenceHierarchy",
+    "EvidencePrecedenceResolver",
+    "ExtractThenFallbackProcessor",
+    "FIELD_NAMES",
+    "FieldState",
+    "LinkedCase",
+    "GeneralizablePolicyExceptionStore",
+    "PolicyArtifactError",
+    "PolicyException",
+    "PolicyRuleSet",
+    "PinnedIsotonicMap",
+    "PredictionRow",
+    "ProcessingPipeline",
+    "RecoverableRenderError",
+    "RecoverableOcrError",
+    "REVIEW_APPROVAL_CONFIDENCE",
+    "REVIEW_DENIAL_CONFIDENCE",
+    "REVIEW_DIPLOMATIC_APPROVAL_CONFIDENCE",
+    "RAPID_OUTPUT_FIELDS",
+    "RapidOcrEngine",
+    "RapidOutputRecoveryProcessor",
+    "RescindedDecisionHandler",
+    "Rect",
+    "RenderedCase",
+    "RenderedPage",
+    "RenderFirstFallbackProcessor",
+    "ResolveThenFallbackProcessor",
+    "ResolvedCase",
+    "ResolvedField",
+    "ReviewDenialRecoveryAdjudicator",
+    "RowValidationError",
+    "SafeFallbackProcessor",
+    "TextLayerReader",
+    "TextSpan",
+    "TesseractPsm6RefinementModel",
+    "TesseractOcrEngine",
+    "UntrustedContentFilter",
+    "VisibleEvidenceExtractor",
+    "VisualCueDetector",
+    "build_rapid_extractor",
+    "discover_case_pdfs",
+    "group_ocr_lines",
+    "OcrLine",
+    "OcrToken",
+    "OutputConfidenceArtifactError",
+    "OutputConfidenceRecalibrationProcessor",
+    "OutputConfidenceRecalibrator",
+    "PinnedOutputConfidenceMap",
+]
