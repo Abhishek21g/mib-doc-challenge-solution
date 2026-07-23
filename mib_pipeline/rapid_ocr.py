@@ -140,8 +140,8 @@ def _trusted_page_text(page: fitz.Page) -> str:
 def tess_fee_crop_text(page: fitz.Page, dpi: int = 250) -> str:
     """Hi-res Tesseract fee-band ensemble (no Rapid). Fast path for UNKNOWN fees.
 
-    Bounded strobl-style multi-threshold + invert/upscale on the fee header band.
-    Keep the variant count small: full-train dual-OCR must stay offline-budgeted.
+    Bounded strobl-style multi-threshold (120/140/160/180 on top-30% ×2) plus
+    invert/autocontrast views. Keep variants few for offline train budgets.
     """
     try:
         import pytesseract
@@ -154,24 +154,31 @@ def tess_fee_crop_text(page: fitz.Page, dpi: int = 250) -> str:
         gray = ImageEnhance.Sharpness(gray).enhance(2.0)
         w, h = gray.size
         band = gray.crop((0, 0, w, max(1, int(h * 0.42))))
+        band30 = gray.crop((0, 0, w, max(1, int(h * 0.30))))
         x2 = band.resize(
             (max(1, band.width * 2), max(1, band.height * 2)),
             Image.Resampling.LANCZOS,
         )
-        variants: list[Image.Image] = [
-            band,
-            ImageOps.autocontrast(x2),
-            ImageOps.autocontrast(ImageOps.invert(band)),
-            ImageEnhance.Contrast(x2).enhance(2.5),
-            x2.point(lambda p: 255 if p > 140 else 0),
-            x2.point(lambda p: 255 if p > 170 else 0),
+        x2_30 = band30.resize(
+            (max(1, band30.width * 2), max(1, band30.height * 2)),
+            Image.Resampling.LANCZOS,
+        )
+        variants: list[tuple[Image.Image, tuple[str, ...]]] = [
+            (band, ("6", "11")),
+            (ImageOps.autocontrast(x2), ("6", "11")),
+            (ImageOps.autocontrast(ImageOps.invert(band)), ("6",)),
+            (ImageEnhance.Contrast(x2).enhance(2.5), ("6",)),
+            (x2.point(lambda p: 255 if p > 140 else 0), ("6",)),
+            (x2.point(lambda p: 255 if p > 170 else 0), ("6",)),
         ]
+        for thr in (120, 140, 160, 180):
+            variants.append(
+                (x2_30.point(lambda p, t=thr: 255 if p > t else 0), ("11",))
+            )
     except Exception:
         return ""
     chunks: list[str] = []
-    for idx, variant in enumerate(variants):
-        # Primary PSM 6; PSM 11 only on the two strongest grayscale views.
-        psms = ("6", "11") if idx < 2 else ("6",)
+    for variant, psms in variants:
         for psm in psms:
             try:
                 txt = pytesseract.image_to_string(variant, config=f"--psm {psm}")
