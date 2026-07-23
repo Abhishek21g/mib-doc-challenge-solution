@@ -146,6 +146,69 @@ _CONF_FALLBACK = {
     "N": 0.62,
 }
 
+# Identity-free isotonic map over stratum confidence masses (fit on public train
+# correctness; monotone, no case IDs). Applied after strata lookup.
+_ISO_MAP: dict[float, float] = {
+    0.395: 0.050,
+    0.420: 0.050,
+    0.440: 0.050,
+    0.455: 0.405,
+    0.466: 0.405,
+    0.480: 0.510,
+    0.483: 0.510,
+    0.490: 0.510,
+    0.499: 0.510,
+    0.500: 0.510,
+    0.526: 0.510,
+    0.528: 0.510,
+    0.543: 0.538,
+    0.550: 0.583,
+    0.559: 0.583,
+    0.588: 0.583,
+    0.600: 0.583,
+    0.623: 0.583,
+    0.676: 0.857,
+    0.680: 0.857,
+    0.683: 0.857,
+    0.694: 0.887,
+    0.706: 0.887,
+    0.726: 0.887,
+    0.736: 0.887,
+    0.740: 0.887,
+    0.760: 0.887,
+    0.786: 0.887,
+    0.790: 0.887,
+    0.800: 0.887,
+    0.807: 0.889,
+    0.833: 0.889,
+    0.849: 0.908,
+    0.850: 0.908,
+    0.857: 0.908,
+    0.863: 0.908,
+    0.867: 0.908,
+    0.873: 0.908,
+    0.890: 0.908,
+    0.895: 0.908,
+    0.902: 0.908,
+    0.906: 0.908,
+    0.909: 0.908,
+    0.917: 0.908,
+    0.920: 0.908,
+    0.923: 0.908,
+    0.929: 0.942,
+    0.930: 0.942,
+    0.933: 0.942,
+    0.935: 0.942,
+    0.938: 0.942,
+    0.940: 0.942,
+    0.944: 0.942,
+    0.950: 0.942,
+    0.955: 0.995,
+    0.962: 0.995,
+    0.966: 0.995,
+    0.995: 0.995,
+}
+
 
 def _run_text(command: list[str], *, timeout: int = 30) -> str:
     try:
@@ -928,6 +991,15 @@ def _core_weak(record: dict[str, str]) -> bool:
     return misses >= 2
 
 
+def _isotonic_confidence(raw: float) -> float:
+    """Monotone identity-free recalibration of stratum confidence masses."""
+    if raw in _ISO_MAP:
+        return _ISO_MAP[raw]
+    # Piecewise-constant nearest knot (strata masses are discrete).
+    best = min(_ISO_MAP, key=lambda k: abs(k - raw))
+    return _ISO_MAP[best]
+
+
 def confidence_for(record: dict[str, str], *, explicit_quality: int = 0) -> float:
     if explicit_quality >= 100:
         return 0.995
@@ -942,18 +1014,21 @@ def confidence_for(record: dict[str, str], *, explicit_quality: int = 0) -> floa
     rf = "flags" if record["risk_flags"] not in {"none", ""} else "none"
     weak = "weak" if _core_weak(record) else "ok"
     key = f"{letter}|{fee}|{visa}|{rf}|{weak}"
+    raw = _CONF_FALLBACK[letter]
     if key in _CONF_STRATA:
-        return _CONF_STRATA[key]
-    # Soft fallbacks: try without weak, then without visa, then decision prior.
-    for alt in (
-        f"{letter}|{fee}|{visa}|{rf}|ok",
-        f"{letter}|{fee}|other|{rf}|ok",
-        f"{letter}|{fee}|other|none|ok",
-        f"{letter}|unknown|other|{rf}|ok",
-    ):
-        if alt in _CONF_STRATA:
-            return _CONF_STRATA[alt]
-    return _CONF_FALLBACK[letter]
+        raw = _CONF_STRATA[key]
+    else:
+        # Soft fallbacks: try without weak, then without visa, then decision prior.
+        for alt in (
+            f"{letter}|{fee}|{visa}|{rf}|ok",
+            f"{letter}|{fee}|other|{rf}|ok",
+            f"{letter}|{fee}|other|none|ok",
+            f"{letter}|unknown|other|{rf}|ok",
+        ):
+            if alt in _CONF_STRATA:
+                raw = _CONF_STRATA[alt]
+                break
+    return _isotonic_confidence(raw)
 
 
 def adjudicate_record(
