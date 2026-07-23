@@ -25,7 +25,12 @@ from .extraction import (
     VisibleEvidenceExtractor,
 )
 from .ingestion import Rect, RenderedCase, RenderedPage
-from .arjun_heads import apply_visible_field_repairs
+from .arjun_heads import (
+    apply_layout_consensus_approval,
+    apply_resolved_clean_packet_approval,
+    apply_visible_field_repairs,
+    prefer_sponsor_or_registry_applicant,
+)
 from .models import PredictionRow
 from .resolution import FieldState, ResolvedCase, ResolvedField
 
@@ -854,13 +859,18 @@ class RapidOutputRecoveryProcessor:
             rapid_candidates=rapid_candidates,
             rapid_resolved=rapid_resolved,
         )
-        return cls._review_approval_head(
+        recovered = cls._review_approval_head(
             final_row=recovered,
             primary_candidates=primary_candidates,
             primary_outcome=primary_outcome,
             primary_resolved=primary_resolved,
             rapid_candidates=rapid_candidates,
             rapid_resolved=rapid_resolved,
+        )
+        return apply_resolved_clean_packet_approval(
+            final_row=recovered,
+            primary_outcome=primary_outcome,
+            primary_candidates=primary_candidates,
         )
 
     @staticmethod
@@ -1250,6 +1260,26 @@ class RapidOutputRecoveryProcessor:
                     primary_outcome=primary_outcome,
                     primary_resolved=primary_resolved,
                 )
+        # Prefer unique sponsor/registry name over damaged intake OCR.
+        final_row = prefer_sponsor_or_registry_applicant(
+            case_id=primary_resolved.case_id,
+            final_row=final_row,
+            primary_candidates=primary_candidates,
+        )
         # Identity-free layout-text field repairs (Amount/$809, registry name,
         # sponsor visa sentence). Never reads SYSTEM:/answer-key decoys.
-        return apply_visible_field_repairs(final_row, pdf_path)
+        final_row = apply_visible_field_repairs(final_row, pdf_path)
+        # DIP-1 only: visible $809 + registry↔applicant consensus (CFA-safe on train).
+        final_row = apply_layout_consensus_approval(final_row, pdf_path)
+        # Field-manual: unknown fee must not remain APPROVED.
+        if (
+            final_row.adjudication == "APPROVED"
+            and final_row.fee_status == "unknown"
+        ):
+            payload = final_row.to_dict()
+            payload["adjudication"] = "NEEDS_REVIEW"
+            payload["confidence"] = min(float(final_row.confidence), 0.45)
+            final_row = PredictionRow.from_mapping(
+                payload, fallback_case_id=final_row.case_id
+            )
+        return final_row

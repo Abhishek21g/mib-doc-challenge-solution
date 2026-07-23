@@ -23,5 +23,10 @@ when answer keys were disabled, so they are not shipped.
 - `apply_visible_field_repairs` from arjunkshah12345-hash’s public MIT fork of
   strobl (`arjun_heads.py`): Amount/$809 + DIP-WAIVER fee cues, registry name
   precedence, sponsor visa/arrival/purpose repairs from **visible** layout text
-  only. Layout-consensus approval and answer-key transcription are **not** used
-  (measured net-negative / policy-forbidden respectively).
+  only.
+- `apply_layout_consensus_approval` (DIP-1 only, confidence 0.61): visible `$809`
+  fee proof + unique registry↔applicant name agreement. Answer-key transcription
+  is **not** used. Broader visa unlocks were measured to create train CFA and are
+  not shipped.
+- `prefer_sponsor_or_registry_applicant` and `apply_resolved_clean_packet_approval`
+  from the same fork (identity-free; fail-closed).
