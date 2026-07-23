@@ -222,10 +222,55 @@ def clean_name(value: str) -> str:
     return " ".join(c[0].upper() + c[1:] for c in corrected)
 
 
+def _fuzzy_flags_from_value(value: str) -> set[str]:
+    """Match OCR-shredded Observed-flags values to canonical flags (dw820-style)."""
+    found: set[str] = set()
+    squashed = re.sub(r"[^a-z0-9]", "", value.lower())
+    if not squashed or squashed in {"none", "nonc", "nona", "nome"}:
+        return found
+    # Shared tokens like "denial" must not imply rescinded_denial.
+    distinctive = {
+        "rescinded_denial": ("rescind", "rescinding", "crossedout"),
+        "biohazard_red": ("biohazard", "biohaz"),
+        "active_warrant": ("warrant",),
+        "memory_tampering": ("tamper", "memory"),
+        "planetary_embargo": ("embargo", "planetary", "penelen"),
+        "illegible_biometrics": ("illegible", "begible", "llegible"),
+        "sponsor_mismatch": ("mismatch",),
+        "identity_conflict": ("conflict",),
+    }
+    for flag in RISK_FLAGS:
+        target = flag.replace("_", "")
+        if target in squashed:
+            found.add(flag)
+            continue
+        needles = distinctive.get(flag, ())
+        if needles and any(n in squashed for n in needles):
+            found.add(flag)
+            continue
+        # Sliding window only for longer shreds against full flag string.
+        if len(squashed) < 6:
+            continue
+        best = 0.0
+        width = min(max(len(target), 6), max(len(squashed), 6))
+        for start in range(0, max(1, len(squashed) - 4)):
+            window = squashed[start : start + width]
+            if len(window) < 5:
+                continue
+            best = max(best, difflib.SequenceMatcher(None, window, target).ratio())
+        if best >= 0.74:
+            found.add(flag)
+    return found
+
+
 def fuzzy_risk_mentions(page: str) -> set[str]:
     found: set[str] = set()
     for line in page.splitlines():
         if not re.search(r"\b(?:obs\w*|flags?|risk|reason|finding)\b", line, re.I):
+            continue
+        found |= _fuzzy_flags_from_value(line)
+        # Prefer Observed-flags line fuzzy over loose n-gram matching.
+        if re.search(r"(?i)observed\s+flags?", line):
             continue
         words = re.findall(r"[A-Za-z]{3,}", line.lower())
         grams = [
@@ -236,9 +281,12 @@ def fuzzy_risk_mentions(page: str) -> set[str]:
         for flag in RISK_FLAGS:
             target = flag.replace("_", "")
             if any(
-                difflib.SequenceMatcher(None, gram, target).ratio() >= 0.76
+                difflib.SequenceMatcher(None, gram, target).ratio() >= 0.78
                 for gram in grams
             ):
+                # Guard shared "denial" token.
+                if flag == "rescinded_denial" and "rescind" not in "".join(grams):
+                    continue
                 found.add(flag)
     return found
 
@@ -518,16 +566,21 @@ def extract_candidates(
             for match in re.finditer(
                 r"\bObserved\s+flags?\s*[: ]\s*([^\n]+)", page, re.I
             ):
+                raw = match.group(1)
                 found = [
                     flag
                     for flag in RISK_FLAGS
-                    if flag in match.group(1).lower().replace(" ", "_")
+                    if flag in raw.lower().replace(" ", "_")
                 ]
+                found_fuzzy = _fuzzy_flags_from_value(raw)
+                found = sorted(set(found) | found_fuzzy)
                 if found:
                     result["risk_flags"].append(
                         (base, "|".join(found), f"{source}:{kind}")
                     )
-                elif re.search(r"\bnone\b", match.group(1), re.I):
+                elif re.search(r"\bnone\b", raw, re.I) or re.match(
+                    r"(?i)^\s*none\b", raw
+                ):
                     result["risk_flags"].append((base, "none", f"{source}:{kind}"))
             for flag in RISK_FLAGS:
                 if flag in page.lower().replace(" ", "_"):
@@ -808,6 +861,56 @@ def _flags_panel_observed(text: str) -> bool:
     return bool(re.search(r"(?i)Observed\s+flags?\s*:", text))
 
 
+def _explicit_approved_signal(text: str) -> bool:
+    cleaned = re.sub(r"(?i)SAMPLE[- ]+DENIAL", "", text)
+    return bool(
+        re.search(
+            r"(?i)Finding\s*:\s*APPROVED|Clean\s+or\s+exception.?qual",
+            cleaned,
+        )
+    )
+
+
+def _mystery_sparse_count(pdf: Path) -> int:
+    """Count unlabeled image-only pages that can hide silent stamps / fee crops."""
+    try:
+        import fitz
+    except Exception:
+        return 0
+    try:
+        doc = fitz.open(pdf)
+    except Exception:
+        return 0
+    n = 0
+    try:
+        for page in doc:
+            native = page.get_text() or ""
+            if not page.get_images() or len(native) >= 120:
+                continue
+            upper = native.upper()
+            if any(
+                k in upper
+                for k in (
+                    "FEE",
+                    "RECEIPT",
+                    "BIOMETRIC",
+                    "B-13",
+                    "OBSERVED",
+                    "REGISTRY",
+                    "INTAKE",
+                    "SPONSOR",
+                    "PASSPORT",
+                    "FORM I",
+                    "ADJUDICATOR",
+                )
+            ):
+                continue
+            n += 1
+    finally:
+        doc.close()
+    return n
+
+
 def _core_weak(record: dict[str, str]) -> bool:
     misses = 0
     if record.get("applicant_name") in {"unknown", ""}:
@@ -924,6 +1027,39 @@ def _try_review_recovery(
     return True
 
 
+def _fee_crop_fill(pdf: Path) -> str:
+    """Hi-res Tess fee-band ensemble for UNKNOWN fees (no Rapid required)."""
+    if os.environ.get("MIB_NO_FEE_CROP", "").strip() in {"1", "true", "yes"}:
+        return ""
+    try:
+        from .rapid_ocr import page_looks_fee_candidate, tess_fee_crop_text
+    except Exception:
+        return ""
+    try:
+        import fitz
+    except Exception:
+        return ""
+    try:
+        doc = fitz.open(pdf)
+    except Exception:
+        return ""
+    chunks: list[str] = []
+    budget = 0
+    try:
+        for page in doc:
+            if budget >= 3:
+                break
+            if not page_looks_fee_candidate(page):
+                continue
+            text = tess_fee_crop_text(page, dpi=240)
+            if text.strip():
+                chunks.append(text)
+                budget += 1
+    finally:
+        doc.close()
+    return "\f".join(chunks)
+
+
 def _rapid_fill(pdf: Path, record: dict[str, str], ocr_text: str) -> str:
     """Fail-closed RapidOCR for still-unknown fee / missing flags panel."""
     need_fee = record.get("fee_status") == "unknown"
@@ -936,7 +1072,14 @@ def _rapid_fill(pdf: Path, record: dict[str, str], ocr_text: str) -> str:
     if os.environ.get("MIB_NO_RAPID", "").strip() in {"1", "true", "yes"}:
         return ""
     try:
-        from .rapid_ocr import ocr_page_fee_band, ocr_page_text, rapid_available
+        from .rapid_ocr import (
+            ocr_page_fee_band,
+            ocr_page_oriented,
+            ocr_page_text,
+            page_looks_bio_candidate,
+            page_looks_fee_candidate,
+            rapid_available,
+        )
     except Exception:
         return ""
     if not rapid_available():
@@ -946,38 +1089,31 @@ def _rapid_fill(pdf: Path, record: dict[str, str], ocr_text: str) -> str:
     except Exception:
         return ""
     chunks: list[str] = []
+    budget = 0
     try:
         doc = fitz.open(pdf)
     except Exception:
         return ""
     try:
         for page in doc:
-            native = page.get_text() or ""
-            upper = native.upper()
-            imgs = page.get_images()
-            fee_like = (
-                "FEE RECEIPT" in upper
-                or ("AMOUNT" in upper and "WAIVER" in upper)
-                or (need_fee and imgs and len(native) < 120)
-            )
-            bio_like = (
-                "BIOMETRIC" in upper
-                or "OBSERVED FLAGS" in upper
-                or (need_flags and imgs and len(native) < 120)
-            )
-            if need_fee and fee_like:
-                text = ocr_page_fee_band(page, dpi=180) or ocr_page_text(page, dpi=160)
+            if budget >= 4:
+                break
+            fee_like = need_fee and page_looks_fee_candidate(page)
+            bio_like = need_flags and page_looks_bio_candidate(page)
+            if fee_like:
+                text = (
+                    ocr_page_fee_band(page, dpi=180)
+                    or ocr_page_oriented(page, dpi=160)
+                    or ocr_page_text(page, dpi=160)
+                )
                 if text.strip():
                     chunks.append(text)
-            elif need_flags and bio_like:
-                text = ocr_page_text(page, dpi=160)
+                    budget += 1
+            elif bio_like:
+                text = ocr_page_oriented(page, dpi=160) or ocr_page_text(page, dpi=160)
                 if text.strip():
                     chunks.append(text)
-            elif need_fee and imgs and len(native) < 80:
-                # Full-page scan with almost no native text — try fee band.
-                text = ocr_page_fee_band(page, dpi=160)
-                if text.strip():
-                    chunks.append(text)
+                    budget += 1
     finally:
         doc.close()
     return "\f".join(chunks)
@@ -1027,16 +1163,25 @@ def parse_pdf(pdf: Path, use_ocr: bool = True, *, high_resolution_done: bool = F
         world_flags.add("planetary_embargo")
         record["risk_flags"] = "|".join(sorted(world_flags))
 
-    # Dual-OCR recovery for remaining UNKNOWN fee / missing flags panel.
+    fee_before_dual = record["fee_status"]
+    # Dual-OCR recovery: Tess fee-crop ensemble then RapidOCR (strobl-style).
     if use_ocr and (
         record["fee_status"] == "unknown"
         or (not flags_observed and record["risk_flags"] in {"none", ""})
     ):
+        enrich_chunks: list[str] = []
+        if record["fee_status"] == "unknown":
+            crop_text = _fee_crop_fill(pdf)
+            if compact(crop_text):
+                enrich_chunks.append(crop_text)
         rapid_text = _rapid_fill(pdf, record, native_clean + "\n" + ocr)
         if compact(rapid_text):
-            ocr = ocr + "\f" + rapid_text
+            enrich_chunks.append(rapid_text)
+        if enrich_chunks:
+            enrich = "\f".join(enrich_chunks)
+            ocr = ocr + "\f" + enrich
             candidates = merge_candidates(
-                candidates, extract_candidates(rapid_text, "ocr")
+                candidates, extract_candidates(enrich, "ocr")
             )
             for field in SCHEMA_FALLBACK:
                 value, quality, conflict = choose_field(
@@ -1055,8 +1200,10 @@ def parse_pdf(pdf: Path, use_ocr: bool = True, *, high_resolution_done: bool = F
                         flags_observed = True
             if found_flags:
                 record["risk_flags"] = "|".join(sorted(found_flags))
-            flags_observed = flags_observed or _flags_panel_observed(rapid_text)
+            flags_observed = flags_observed or _flags_panel_observed(enrich)
 
+    fee_recovered = fee_before_dual == "unknown" and record["fee_status"] != "unknown"
+    joined_text = native_clean + "\n" + ocr
     explicit, explicit_quality, explicit_conflict = choose(
         candidates.get("adjudication", [])
     )
@@ -1066,6 +1213,29 @@ def parse_pdf(pdf: Path, use_ocr: bool = True, *, high_resolution_done: bool = F
     record["adjudication"] = adjudicate_record(
         record, explicit, unreadable, flags_observed=flags_observed
     )
+
+    # Gate: fee recovery alone must not create silent-stamp CFAs.
+    if (
+        fee_recovered
+        and record["adjudication"] == "APPROVED"
+        and not flags_observed
+        and not _explicit_approved_signal(joined_text)
+        and not explicit
+    ):
+        record["adjudication"] = "NEEDS_REVIEW"
+
+    # Safe silent-stamp heuristic: mystery image page + no flags panel + no
+    # explicit approval ⇒ demote APPROVED→REVIEW (catches hidden biohazard stamps
+    # without blanket demotion of all unobserved-panel approvals).
+    if (
+        record["adjudication"] == "APPROVED"
+        and record["risk_flags"] in {"none", ""}
+        and not flags_observed
+        and not explicit
+        and not _explicit_approved_signal(joined_text)
+        and _mystery_sparse_count(pdf) >= 1
+    ):
+        record["adjudication"] = "NEEDS_REVIEW"
 
     damage = bool(
         re.search(
