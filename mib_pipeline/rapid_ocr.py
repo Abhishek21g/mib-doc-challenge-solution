@@ -127,8 +127,22 @@ def ocr_page_oriented(page: fitz.Page, dpi: int = 180) -> str:
     return best
 
 
+def _trusted_page_text(page: fitz.Page) -> str:
+    """Drop SYSTEM:/answer-key injection lines before layout heuristics."""
+    lines = []
+    for line in (page.get_text() or "").splitlines():
+        if re.search(r"(?i)SYSTEM:|answer key|ignore visible", line):
+            continue
+        lines.append(line)
+    return "\n".join(lines)
+
+
 def tess_fee_crop_text(page: fitz.Page, dpi: int = 250) -> str:
-    """Hi-res Tesseract fee-band ensemble (no Rapid). Fast path for UNKNOWN fees."""
+    """Hi-res Tesseract fee-band ensemble (no Rapid). Fast path for UNKNOWN fees.
+
+    Bounded strobl-style multi-threshold + invert/upscale on the fee header band.
+    Keep the variant count small: full-train dual-OCR must stay offline-budgeted.
+    """
     try:
         import pytesseract
     except Exception:
@@ -139,17 +153,28 @@ def tess_fee_crop_text(page: fitz.Page, dpi: int = 250) -> str:
         gray = ImageOps.autocontrast(ImageOps.grayscale(img))
         gray = ImageEnhance.Sharpness(gray).enhance(2.0)
         w, h = gray.size
-        bands = [
-            gray.crop((0, 0, w, max(1, int(h * 0.55)))),
-            gray.crop((0, 0, w, max(1, int(h * 0.40)))),
+        band = gray.crop((0, 0, w, max(1, int(h * 0.42))))
+        x2 = band.resize(
+            (max(1, band.width * 2), max(1, band.height * 2)),
+            Image.Resampling.LANCZOS,
+        )
+        variants: list[Image.Image] = [
+            band,
+            ImageOps.autocontrast(x2),
+            ImageOps.autocontrast(ImageOps.invert(band)),
+            ImageEnhance.Contrast(x2).enhance(2.5),
+            x2.point(lambda p: 255 if p > 140 else 0),
+            x2.point(lambda p: 255 if p > 170 else 0),
         ]
     except Exception:
         return ""
     chunks: list[str] = []
-    for band in bands:
-        for psm in ("6", "11"):
+    for idx, variant in enumerate(variants):
+        # Primary PSM 6; PSM 11 only on the two strongest grayscale views.
+        psms = ("6", "11") if idx < 2 else ("6",)
+        for psm in psms:
             try:
-                txt = pytesseract.image_to_string(band, config=f"--psm {psm}")
+                txt = pytesseract.image_to_string(variant, config=f"--psm {psm}")
             except Exception:
                 continue
             if txt and txt.strip():
@@ -158,8 +183,12 @@ def tess_fee_crop_text(page: fitz.Page, dpi: int = 250) -> str:
 
 
 def page_looks_fee_candidate(page: fitz.Page) -> bool:
-    """Sparse image page that may hold a fee receipt (labeled or mystery)."""
-    native = page.get_text() or ""
+    """Sparse image page that may hold a fee receipt (labeled or mystery).
+
+    Uses trusted (injection-stripped) text so SYSTEM answer-key overlays do not
+    inflate native length and hide washed fee raster pages.
+    """
+    native = _trusted_page_text(page)
     upper = native.upper()
     imgs = page.get_images()
     if not imgs:
@@ -189,7 +218,7 @@ def page_looks_fee_candidate(page: fitz.Page) -> bool:
 
 
 def page_looks_bio_candidate(page: fitz.Page) -> bool:
-    native = page.get_text() or ""
+    native = _trusted_page_text(page)
     upper = native.upper()
     if "BIOMETRIC" in upper or "OBSERVED FLAGS" in upper or "B-13" in upper:
         return True

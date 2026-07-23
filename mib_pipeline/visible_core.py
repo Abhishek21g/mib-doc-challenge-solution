@@ -935,7 +935,12 @@ def _explicit_approved_signal(text: str) -> bool:
 
 
 def _mystery_sparse_count(pdf: Path) -> int:
-    """Count unlabeled image-only pages that can hide silent stamps / fee crops."""
+    """Count unlabeled image-only pages that can hide silent stamps / fee crops.
+
+    Uses raw native text (including injection lines). Stripping SYSTEM overlays
+    here over-counts ordinary image form pages as mystery and nets large
+    true-approval damage; fee/bio candidate gating handles injection separately.
+    """
     try:
         import fitz
     except Exception:
